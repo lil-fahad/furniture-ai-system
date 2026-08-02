@@ -1,0 +1,81 @@
+{
+  "format_version": 1,
+  "release": "FurnitureAI Professional Models v0.5 recovered upgrade",
+  "source_status": "partial_recovery",
+  "pretrained_total_bytes": 421713661,
+  "trained_checkpoint_total_bytes": 113908295,
+  "pretrained_models": [
+    {
+      "id": "detr_resnet50",
+      "name": "DETR ResNet-50",
+      "task": "object_detection",
+      "license": "Apache-2.0",
+      "installed": true,
+      "installed_bytes": 166598669,
+      "failures": []
+    },
+    {
+      "id": "sam2_1_hiera_tiny",
+      "name": "SAM 2.1 Hiera Tiny",
+      "task": "promptable_segmentation",
+      "license": "Apache-2.0",
+      "installed": true,
+      "installed_bytes": 155935207,
+      "failures": []
+    },
+    {
+      "id": "depth_anything_v2_small",
+      "name": "Depth Anything V2 Small",
+      "task": "monocular_depth_estimation",
+      "license": "Apache-2.0",
+      "installed": true,
+      "installed_bytes": 99179785,
+      "failures": []
+    }
+  ],
+  "trained_checkpoints": [
+    {
+      "id": "efficientnet_b0_best",
+      "name": "EfficientNet-B0 furniture classifier (best)",
+      "task": "furniture_classification",
+      "path": "models/efficientnet_b0/efficientnet_b0_best.pt",
+      "size_bytes": 16390469,
+      "sha256": "983d2f3870e6561724067ab6a89ac2a77749d7b7710afc9664766c7082857cd0",
+      "status": "recovered_verified",
+      "installed": true,
+      "failures": []
+    },
+    {
+      "id": "efficientnet_b0_multiview_best",
+      "name": "EfficientNet-B0 multiview furniture classifier (best)",
+      "task": "furniture_classification_multiview",
+      "path": "models/efficientnet_b0_multiview/efficientnet_b0_best.pt",
+      "size_bytes": 48758913,
+      "sha256": "c0609c87c86218644fa9356e26990d6d6171827acd0bdfc7e37a5e30a2a717eb",
+      "status": "recovered_verified",
+      "installed": true,
+      "failures": []
+    },
+    {
+      "id": "efficientnet_b0_multiview_last",
+      "name": "EfficientNet-B0 multiview furniture classifier (last)",
+      "task": "furniture_classification_multiview_checkpoint",
+      "path": "models/efficientnet_b0_multiview/efficientnet_b0_last.pt",
+      "size_bytes": 48758913,
+      "sha256": "2f4a983a82237a5a22c9718ca43ae86b72e0fc82fcf48ad84e64885aff74b092",
+      "status": "recovered_verified",
+      "installed": true,
+      "failures": []
+    }
+  ],
+  "full_archive": {
+    "filename": "FurnitureAI_Professional_Models_v0.5_COMPLETE.zip",
+    "size_bytes": 559937621,
+    "sha256": "c3c1bf271d5c3436f2dd611293f189f4cf3a3bd796227742371d90d4e5100f01"
+  },
+  "source_archive": {
+    "filename": "FurnitureAI_Intelligence_Source_v0.5.zip",
+    "size_bytes": 138273,
+    "sha256": "c725a4bc180762d3da368b77c985498760224858fc819ce5f85c0d4d76af8f63"
+  }
+}
