@@ -1,4 +1,4 @@
-.PHONY: install test lint run ui check
+.PHONY: install test lint run ui check audit models-check models-verify
 install:
 	python -m pip install -e ".[dev,ui]"
 
@@ -14,4 +14,15 @@ run:
 ui:
 	streamlit run apps/streamlit_app.py
 
-check: lint test
+models-check:
+	python scripts/install_professional_bundle.py --check-spec
+	python scripts/model_manifest.py
+
+models-verify:
+	python scripts/install_professional_bundle.py --verify-installed
+
+audit:
+	python scripts/scan_secrets.py
+	python scripts/repository_audit.py
+
+check: lint test models-check audit
