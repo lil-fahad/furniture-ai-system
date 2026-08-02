@@ -61,7 +61,7 @@ class SourceRegistry:
     @classmethod
     def load(cls, path: str | Path | None = None) -> "SourceRegistry":
         configured = os.getenv("FURNITURE_SOURCES_FILE")
-        source_path = Path(path or configured or Path(__file__).resolve().parents[2] / "sources.lock.json")
+        source_path = cls._resolve_path(path=path, configured=configured)
         try:
             payload = json.loads(source_path.read_text(encoding="utf-8"))
         except FileNotFoundError as exc:
@@ -76,6 +76,20 @@ class SourceRegistry:
         sources = tuple(Source.from_dict(item) for item in raw_sources)
         metadata = {key: value for key, value in payload.items() if key != "sources"}
         return cls(sources=sources, metadata=metadata)
+
+    @staticmethod
+    def _resolve_path(path: str | Path | None, configured: str | None) -> Path:
+        if path or configured:
+            return Path(path or configured or "sources.lock.json").expanduser().resolve()
+
+        candidates = (
+            Path.cwd() / "sources.lock.json",
+            Path(__file__).resolve().parents[2] / "sources.lock.json",
+        )
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        return candidates[0]
 
     def _validate(self) -> None:
         ids: set[str] = set()
