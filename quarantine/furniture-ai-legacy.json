@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "status": "quarantined",
+  "repository": "lil-fahad/-furniture-ai",
+  "reviewed_commit": "f2e90a2fb8ff48129670eda06b657a9cb33b449b",
+  "purpose": "Preserve a reference to the legacy furniture AI repository until it is safe and useful to integrate.",
+  "included_in_runtime": false,
+  "included_as_submodule": false,
+  "reason_for_isolation": [
+    "Git history contains a previously exposed Alibaba credential.",
+    "The repository contains duplicated backend/application structures.",
+    "Some training and catalog paths are placeholders or unverified prototypes."
+  ],
+  "activation_requirements": [
+    "Revoke or rotate the exposed credential and review its usage logs.",
+    "Clean the contaminated Git history and invalidate old clones where practical.",
+    "Run secret scanning and dependency/security checks.",
+    "Separate real implementations from mock, placeholder, and demo code.",
+    "Confirm licenses for code, datasets, models, images, and catalog records.",
+    "Import only reviewed components through a new pull request."
+  ],
+  "handling_policy": "Do not execute, import, clone automatically, or expose this repository through the unified runtime until every activation requirement is completed.",
+  "secret_value_stored_here": false,
+  "last_reviewed": "2026-08-02"
+}
