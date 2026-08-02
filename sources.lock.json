@@ -17,7 +17,7 @@
         "fastapi",
         "streamlit"
       ],
-      "review": "Integrate as a component. Treat Alibaba responses as demo/mock until replaced by an authorized provider."
+      "review": "Secure v2 API merged with strict image validation and guarded administrative operations. Alibaba catalog responses remain explicitly marked as simulated until replaced by an authorized provider."
     },
     {
       "id": "floorplan-engine",
@@ -33,7 +33,7 @@
         "fastapi",
         "streamlit"
       ],
-      "review": "Best current floor-plan pipeline. Replace default JWT secret and wildcard CORS before deployment."
+      "review": "Secure deterministic v2 merged with explicit JWT configuration, narrow CORS defaults, calibrated scaling, model caching, and geometry tests. Trained segmentation weights are still required for production inference."
     },
     {
       "id": "vision-prototypes",
@@ -48,7 +48,7 @@
         "layout-planning",
         "visualization"
       ],
-      "review": "Research prototype. Current layout action uses a random state and must not be treated as trained inference."
+      "review": "Deterministic room-aware v2 merged. Layout state is derived from room masks and room classification uses masked crops; keep experimental until evaluated on a labeled floor-plan benchmark."
     },
     {
       "id": "generative-lab",
