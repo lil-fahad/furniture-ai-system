@@ -1,13 +1,25 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 
 from furniture_system import __version__
 from furniture_system.registry import RegistryError, SourceRegistry
+
+Tier = Literal["core", "experimental", "legacy", "private", "blocked"]
+Visibility = Literal["public", "private"]
+TierFilter = Annotated[Tier | None, Query(description="Filter by integration tier")]
+VisibilityFilter = Annotated[
+    Visibility | None,
+    Query(description="Filter by repository visibility"),
+]
+BlockedFilter = Annotated[
+    bool,
+    Query(description="Include quarantined sources in the response"),
+]
 
 
 class SourceResponse(BaseModel):
@@ -49,11 +61,9 @@ def health() -> dict[str, object]:
 
 @app.get("/api/v1/components", response_model=list[SourceResponse], tags=["registry"])
 def components(
-    tier: Literal["core", "experimental", "legacy", "private", "blocked"] | None = Query(
-        default=None
-    ),
-    visibility: Literal["public", "private"] | None = Query(default=None),
-    include_blocked: bool = Query(default=False),
+    tier: TierFilter = None,
+    visibility: VisibilityFilter = None,
+    include_blocked: BlockedFilter = False,
 ) -> list[SourceResponse]:
     sources = get_registry().list(
         tier=tier,
