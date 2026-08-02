@@ -20,7 +20,10 @@ settings = get_settings()
 app = FastAPI(
     title="Furniture AI System",
     version=__version__,
-    description="Unified floor-plan analysis, furniture layout, AI guidance, catalog, and bookings API.",
+    description=(
+        "Unified floor-plan analysis, furniture layout, AI guidance, catalog, "
+        "and bookings API."
+    ),
 )
 app.add_middleware(
     CORSMiddleware,
@@ -54,7 +57,10 @@ def ready() -> dict[str, object]:
         model_statuses = ModelRegistry(active.model_manifest_path).statuses()
         get_booking_store()
     except (OSError, ValueError) as exc:
-        raise HTTPException(status_code=503, detail="Application dependencies are not ready") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Application dependencies are not ready",
+        ) from exc
     return {
         "status": "ready",
         "models_present": sum(status.present for status in model_statuses),
@@ -108,7 +114,8 @@ def catalog(room_type: str | None = Query(default=None)) -> list[Product]:
 
 @app.get("/api/v1/models", tags=["models"])
 def models(active_settings: Annotated[Settings, Depends(get_settings)]) -> list[dict[str, object]]:
-    return [status.__dict__ for status in ModelRegistry(active_settings.model_manifest_path).statuses()]
+    registry = ModelRegistry(active_settings.model_manifest_path)
+    return [status.__dict__ for status in registry.statuses()]
 
 
 @app.post(

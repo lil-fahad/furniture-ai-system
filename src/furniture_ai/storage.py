@@ -55,7 +55,12 @@ class BookingStore:
                 ),
             )
             booking_id = int(cursor.lastrowid)
-        return Booking(id=booking_id, status="pending", created_at=created_at, **request.model_dump())
+        return Booking(
+            id=booking_id,
+            status="pending",
+            created_at=created_at,
+            **request.model_dump(),
+        )
 
     def list(self, limit: int = 100) -> list[Booking]:
         with self._connect() as connection:

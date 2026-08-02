@@ -54,7 +54,9 @@ class FloorPlanAnalyzer:
             )
             for index, polygon in enumerate(room_polygons)
         ]
-        warnings.append("Door and window extraction requires a trained segmenter and was not inferred")
+        warnings.append(
+            "Door and window extraction requires a trained segmenter and was not inferred"
+        )
         return FloorPlanAnalysis(
             source_width=image.width,
             source_height=image.height,

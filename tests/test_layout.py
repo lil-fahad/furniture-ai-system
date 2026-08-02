@@ -14,7 +14,12 @@ def test_layout_is_deterministic_and_non_overlapping() -> None:
             Room(
                 id="room-1",
                 room_type="living_room",
-                polygon=[Point(x=20, y=20), Point(x=780, y=20), Point(x=780, y=580), Point(x=20, y=580)],
+                polygon=[
+                    Point(x=20, y=20),
+                    Point(x=780, y=20),
+                    Point(x=780, y=580),
+                    Point(x=20, y=580),
+                ],
                 area=425_600,
             )
         ],

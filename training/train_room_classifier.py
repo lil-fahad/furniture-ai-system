@@ -22,7 +22,11 @@ def seed_everything(seed: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("data", type=Path, help="ImageFolder root: one directory per room class")
-    parser.add_argument("--output", type=Path, default=Path("models/room_classifier/efficientnet_b0.pth"))
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("models/room_classifier/efficientnet_b0.pth"),
+    )
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--seed", type=int, default=42)

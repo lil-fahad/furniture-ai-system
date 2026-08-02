@@ -5,7 +5,8 @@ from functools import lru_cache
 from pathlib import Path
 
 from shapely.affinity import rotate
-from shapely.geometry import LineString, Point as ShapelyPoint, Polygon, box
+from shapely.geometry import LineString, Polygon, box
+from shapely.geometry import Point as ShapelyPoint
 
 from furniture_ai.contracts import (
     DesignResult,
@@ -36,7 +37,11 @@ def rectangle(cx: float, cy: float, width: float, depth: float, angle: float) ->
     return rotate(candidate, angle, origin=(cx, cy), use_radians=False) if angle else candidate
 
 
-def _dimensions(room: Polygon, product: Product, pixels_per_cm: float | None) -> tuple[float, float, str]:
+def _dimensions(
+    room: Polygon,
+    product: Product,
+    pixels_per_cm: float | None,
+) -> tuple[float, float, str]:
     if pixels_per_cm:
         return product.width_cm * pixels_per_cm, product.depth_cm * pixels_per_cm, "physical"
     min_x, min_y, max_x, max_y = room.bounds

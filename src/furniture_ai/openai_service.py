@@ -4,11 +4,8 @@ import base64
 import json
 import re
 from io import BytesIO
+from typing import Any
 
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from openai import OpenAI
 from PIL import Image
 
 from furniture_ai.config import Settings
@@ -76,7 +73,11 @@ class OpenAIDesignService:
                     "role": "user",
                     "content": [
                         {"type": "input_text", "text": prompt},
-                        {"type": "input_image", "image_url": _image_data_url(image), "detail": "high"},
+                        {
+                            "type": "input_image",
+                            "image_url": _image_data_url(image),
+                            "detail": "high",
+                        },
                     ],
                 }
             ],
@@ -96,7 +97,8 @@ class OpenAIDesignService:
     def create_design_brief(self, floor_plan: FloorPlanAnalysis, preferences: str) -> str:
         prompt = (
             "Create a concise professional interior-design brief. Respect circulation, doors, room "
-            "dimensions, and the furniture placements in the supplied JSON. Do not claim exact physical "
+            "dimensions, and the furniture placements in the supplied JSON. Do not claim "
+            "exact physical "
             "dimensions when pixels_per_cm is absent. Preferences: "
             f"{preferences}\nFloor plan JSON: {floor_plan.model_dump_json()}"
         )
