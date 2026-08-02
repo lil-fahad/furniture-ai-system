@@ -1,11 +1,9 @@
-# ruff: noqa: I001
 from __future__ import annotations
 
 from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
 
 NonNegativeFloat = Annotated[float, Field(ge=0)]
 Confidence = Annotated[float, Field(ge=0, le=1)]
