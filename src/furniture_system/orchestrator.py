@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections import OrderedDict
-
 from furniture_system.contracts import ExecutionPlan, PlanRequest, PlanStep
 from furniture_system.registry import Source, SourceRegistry
 
@@ -22,48 +20,47 @@ def _eligible(source: Source, request: PlanRequest) -> bool:
     return source.path is not None
 
 
-def _select_provider(
-    registry: SourceRegistry,
-    capability: str,
-    request: PlanRequest,
-) -> Source | None:
-    candidates = [
-        source
-        for source in registry.sources
-        if capability in source.capabilities and _eligible(source, request)
-    ]
-    if not candidates:
-        return None
-    return min(
-        candidates,
-        key=lambda source: (
-            _TIER_PRIORITY.get(source.tier, 98),
-            source.visibility == "private",
-            source.id,
-        ),
+def _provider_priority(source: Source, coverage_count: int) -> tuple[int, int, bool, str]:
+    """Rank providers by coverage first, then governance quality and stable id."""
+    return (
+        -coverage_count,
+        _TIER_PRIORITY.get(source.tier, 98),
+        source.visibility == "private",
+        source.id,
     )
 
 
 def build_execution_plan(registry: SourceRegistry, request: PlanRequest) -> ExecutionPlan:
-    requested = list(
-        dict.fromkeys(
-            value.strip() for value in request.capabilities if value.strip()
-        )
-    )
+    requested = list(dict.fromkeys(value.strip() for value in request.capabilities if value.strip()))
     if not requested:
         raise PlanningError("At least one non-empty capability is required")
 
-    assignments: OrderedDict[str, tuple[Source, list[str]]] = OrderedDict()
-    unresolved: list[str] = []
+    eligible = [source for source in registry.sources if _eligible(source, request)]
+    remaining = requested.copy()
+    selected: list[tuple[Source, list[str]]] = []
 
-    for capability in requested:
-        provider = _select_provider(registry, capability, request)
-        if provider is None:
-            unresolved.append(capability)
-            continue
-        if provider.id not in assignments:
-            assignments[provider.id] = (provider, [])
-        assignments[provider.id][1].append(capability)
+    # Deterministic greedy set cover: choose the provider that satisfies the most
+    # unresolved capabilities, then prefer core/public providers. This avoids
+    # splitting one coherent request across services when a single reviewed
+    # component already covers the complete capability set.
+    while remaining:
+        candidates: list[tuple[Source, list[str]]] = []
+        for source in eligible:
+            covered = [capability for capability in remaining if capability in source.capabilities]
+            if covered:
+                candidates.append((source, covered))
+
+        if not candidates:
+            break
+
+        source, covered = min(
+            candidates,
+            key=lambda candidate: _provider_priority(candidate[0], len(candidate[1])),
+        )
+        selected.append((source, covered))
+        covered_set = set(covered)
+        remaining = [capability for capability in remaining if capability not in covered_set]
+        eligible = [candidate for candidate in eligible if candidate.id != source.id]
 
     steps = [
         PlanStep(
@@ -74,10 +71,10 @@ def build_execution_plan(registry: SourceRegistry, request: PlanRequest) -> Exec
             tier=source.tier,
             path=source.path or "",
         )
-        for index, (source, capabilities) in enumerate(assignments.values(), start=1)
+        for index, (source, capabilities) in enumerate(selected, start=1)
     ]
     return ExecutionPlan(
         requested_capabilities=requested,
         steps=steps,
-        unresolved_capabilities=unresolved,
+        unresolved_capabilities=remaining,
     )
