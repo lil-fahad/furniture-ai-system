@@ -1,68 +1,51 @@
 # Furniture AI System
 
-مستودع موحّد لمشاريع الأثاث والتصميم الداخلي في حساب `lil-fahad`.
+A single production-oriented repository for interior-design automation. It replaces the former collection of overlapping repositories and submodules with one Python package, one API, one UI, one model registry, and one test suite.
 
-This repository is a secure monorepo control plane. It pins the useful source repositories to reviewed commits, exposes one FastAPI gateway for capability discovery, and keeps experimental, legacy, private, and quarantined projects clearly separated.
+## Included capabilities
 
-## Quick start
+- Secure floor-plan image upload and validation.
+- Deterministic room extraction using OpenCV, with safe fallbacks.
+- Constraint-based furniture placement using Shapely.
+- Optional OpenAI vision refinement and design briefs through `OPENAI_API_KEY`.
+- Product catalog and persistent SQLite booking service.
+- Optional local room-classifier and floor-plan-segmenter checkpoints.
+- Reproducible training scripts and model manifests.
+- FastAPI, Streamlit, Docker, CI, and security tests.
+
+## Start
 
 ```bash
-git clone --recurse-submodules https://github.com/lil-fahad/furniture-ai-system.git
-cd furniture-ai-system
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
-uvicorn furniture_system.main:app --reload
-```
-
-Windows PowerShell:
-
-```powershell
-git clone --recurse-submodules https://github.com/lil-fahad/furniture-ai-system.git
-cd furniture-ai-system
-py -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-uvicorn furniture_system.main:app --reload
+pip install -e ".[dev,ui]"
+cp .env.example .env
+uvicorn furniture_ai.api:app --reload
 ```
 
 Open `http://127.0.0.1:8000/docs`.
 
-## Unified structure
-
-- `src/furniture_system/` — secure API gateway and source registry.
-- `components/` — reviewed public AI components pinned as Git submodules.
-- `private/` — private product/demo repositories; GitHub authentication is required.
-- `legacy/` — older prototypes retained for reference, not production.
-- `sources.lock.json` — immutable source commit registry and integration status.
-- `docs/AUDIT.md` — technical review and consolidation decisions.
-- `docs/SECURITY.md` — urgent security actions and repository rules.
-
-## Capabilities
-
-The unified registry covers:
-
-- floor-plan parsing and semantic segmentation;
-- collision-aware furniture placement;
-- furniture and room classification;
-- generative interior-design experiments;
-- Streamlit, React, Node, Flask, and FastAPI interfaces;
-- commerce/catalog and designer-booking prototypes.
-
-## Source policy
-
-Source code is not flattened blindly. Submodules preserve each repository's history and license while the lock file makes builds reproducible. Private repositories remain private. A repository with a credential exposed in Git history is blocked and is not imported.
-
-## Commands
+For the UI:
 
 ```bash
-make setup          # install gateway
-make sync-public    # initialize public components only
-make sync-all       # initialize public + private components
-make test           # run tests
-make api            # start unified API
+streamlit run apps/streamlit_app.py
 ```
 
-## Security warning
+## Secrets
 
-One reviewed legacy repository contains an exposed Alibaba credential in Git history. It is intentionally excluded. Rotate/revoke the credential and clean the source history before any future import. See `docs/SECURITY.md`.
+Never commit API keys. GitHub Actions should provide `OPENAI_API_KEY` as a repository secret. The application only reports whether the integration is configured; it never returns or logs the value.
+
+## Project layout
+
+```text
+src/furniture_ai/      Unified application package
+apps/                  One Streamlit interface
+training/              Supported training pipelines
+models/                 Checkpoint manifest and local checkpoint directory
+data/                   Catalog data
+scripts/                Validation and model-management utilities
+tests/                  Unified tests
+docs/                   Architecture, migration, security, and model docs
+```
+
+See `docs/MIGRATION.md` for the consolidation decisions and `PROVENANCE.json` for source commits.

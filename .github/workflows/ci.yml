@@ -8,37 +8,32 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONPATH: ${{ github.workspace }}/src
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
 jobs:
-  gateway:
+  quality:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout control plane
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Install
         run: python -m pip install -e ".[dev]"
-
       - name: Lint
         run: ruff check .
-
       - name: Test
-        run: pytest
-
-      - name: Validate locked sources
+        run: pytest --cov=furniture_ai --cov-report=term-missing
+      - name: Verify secret wiring without disclosure
+        if: env.OPENAI_API_KEY != ''
         run: |
           python - <<'PY'
-          from furniture_system.registry import SourceRegistry
-          registry = SourceRegistry.load("sources.lock.json")
-          summary = registry.summary()
-          assert summary["importable_sources"] == 9
-          assert summary["blocked_sources"] == 1
-          print(summary)
+          from furniture_ai.config import get_settings
+          assert get_settings().openai_configured is True
+          print("OPENAI_API_KEY is configured")
           PY
+      - name: Secret scan
+        run: python scripts/scan_secrets.py
