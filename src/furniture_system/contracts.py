@@ -1,16 +1,17 @@
+# ruff: noqa: I001
 from __future__ import annotations
 
-import enum
-import typing
+from enum import StrEnum
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-NonNegativeFloat = typing.Annotated[float, Field(ge=0)]
-Confidence = typing.Annotated[float, Field(ge=0, le=1)]
+NonNegativeFloat = Annotated[float, Field(ge=0)]
+Confidence = Annotated[float, Field(ge=0, le=1)]
 
 
-class Unit(enum.StrEnum):
+class Unit(StrEnum):
     PIXEL = "px"
     CENTIMETER = "cm"
     METER = "m"
@@ -36,7 +37,7 @@ class BoundingBox(BaseModel):
         return self.width * self.height
 
 
-class OpeningKind(enum.StrEnum):
+class OpeningKind(StrEnum):
     DOOR = "door"
     WINDOW = "window"
 
