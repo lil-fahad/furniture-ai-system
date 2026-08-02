@@ -45,7 +45,11 @@ def _select_provider(
 
 
 def build_execution_plan(registry: SourceRegistry, request: PlanRequest) -> ExecutionPlan:
-    requested = list(dict.fromkeys(value.strip() for value in request.capabilities if value.strip()))
+    requested = list(
+        dict.fromkeys(
+            value.strip() for value in request.capabilities if value.strip()
+        )
+    )
     if not requested:
         raise PlanningError("At least one non-empty capability is required")
 
