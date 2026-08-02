@@ -31,7 +31,11 @@ def _provider_priority(source: Source, coverage_count: int) -> tuple[int, int, b
 
 
 def build_execution_plan(registry: SourceRegistry, request: PlanRequest) -> ExecutionPlan:
-    requested = list(dict.fromkeys(value.strip() for value in request.capabilities if value.strip()))
+    requested = list(
+        dict.fromkeys(
+            value.strip() for value in request.capabilities if value.strip()
+        )
+    )
     if not requested:
         raise PlanningError("At least one non-empty capability is required")
 
