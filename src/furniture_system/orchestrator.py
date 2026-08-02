@@ -50,7 +50,11 @@ def build_execution_plan(registry: SourceRegistry, request: PlanRequest) -> Exec
     while remaining:
         candidates: list[tuple[Source, list[str]]] = []
         for source in eligible:
-            covered = [capability for capability in remaining if capability in source.capabilities]
+            covered = [
+                capability
+                for capability in remaining
+                if capability in source.capabilities
+            ]
             if covered:
                 candidates.append((source, covered))
 
@@ -63,7 +67,9 @@ def build_execution_plan(registry: SourceRegistry, request: PlanRequest) -> Exec
         )
         selected.append((source, covered))
         covered_set = set(covered)
-        remaining = [capability for capability in remaining if capability not in covered_set]
+        remaining = [
+            capability for capability in remaining if capability not in covered_set
+        ]
         eligible = [candidate for candidate in eligible if candidate.id != source.id]
 
     steps = [
