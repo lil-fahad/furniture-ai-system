@@ -1,0 +1,37 @@
+name: Export repository snapshot
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository tree
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+          lfs: true
+
+      - name: Create source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude='.git' --exclude='repository-snapshot.tar.gz' -czf repository-snapshot.tar.gz .
+          sha256sum repository-snapshot.tar.gz > repository-snapshot.sha256
+
+      - name: Upload snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: repository-snapshot
+          path: |
+            repository-snapshot.tar.gz
+            repository-snapshot.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
