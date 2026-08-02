@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "id": "room-classifier-efficientnet-b0",
+      "task": "room-classification",
+      "path": "room_classifier/efficientnet_b0.pth",
+      "sha256": null,
+      "notes": "Train with training/train_room_classifier.py or import a verified compatible checkpoint."
+    },
+    {
+      "id": "floorplan-segmenter-unet",
+      "task": "floor-plan-segmentation",
+      "path": "floorplan_segmenter/unet.pt",
+      "sha256": null,
+      "notes": "Train with training/train_floorplan_segmenter.py. OpenCV remains the safe default fallback."
+    }
+  ]
+}
