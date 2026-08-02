@@ -1,0 +1,40 @@
+name: ChatGPT complete source export
+
+on:
+  push:
+    branches:
+      - export/chatgpt-full-20260802-1401
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout export branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Archive original pinned commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="${GITHUB_REPOSITORY#*/}"
+          original_sha="$(git rev-parse HEAD^)"
+          archive="source-${repo}.tar.gz"
+          git archive --format=tar.gz --prefix="${repo}/" -o "${archive}" "${original_sha}"
+          sha256sum "${archive}" > "${archive}.sha256"
+          printf '%s\n' "${original_sha}" > ORIGINAL_COMMIT.txt
+
+      - name: Upload complete source
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-${{ github.event.repository.name }}
+          path: |
+            source-*.tar.gz
+            source-*.tar.gz.sha256
+            ORIGINAL_COMMIT.txt
+          if-no-files-found: error
+          retention-days: 1
