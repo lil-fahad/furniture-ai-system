@@ -25,6 +25,12 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Lint
         run: ruff check .
+      - name: Compile
+        run: python -m compileall src training tests scripts
+      - name: Validate professional model metadata
+        run: |
+          python scripts/install_professional_bundle.py --check-spec
+          python scripts/model_manifest.py
       - name: Test
         run: pytest --cov=furniture_ai --cov-report=term-missing
       - name: Verify secret wiring without disclosure
@@ -37,3 +43,5 @@ jobs:
           PY
       - name: Secret scan
         run: python scripts/scan_secrets.py
+      - name: Repository audit
+        run: python scripts/repository_audit.py
