@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from importlib import resources
 from pathlib import Path
 
 from shapely.affinity import rotate
@@ -19,9 +20,27 @@ from furniture_ai.contracts import (
 WALL_CATEGORIES = {"sofa", "bed", "wardrobe", "tv_unit", "desk", "cabinet"}
 
 
-@lru_cache(maxsize=1)
-def load_catalog(path: str = "data/furniture_catalog.json") -> list[Product]:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+@lru_cache(maxsize=8)
+def load_catalog(path: str | Path | None = None) -> list[Product]:
+    """Load the product catalog from an explicit file or packaged defaults."""
+    if path is not None:
+        source = Path(path)
+        if not source.is_file():
+            raise FileNotFoundError(f"Furniture catalog not found: {source}")
+        text = source.read_text(encoding="utf-8")
+    else:
+        project_catalog = Path("data/furniture_catalog.json")
+        if project_catalog.is_file():
+            text = project_catalog.read_text(encoding="utf-8")
+        else:
+            resource = resources.files("furniture_ai.resources").joinpath(
+                "furniture_catalog.json"
+            )
+            text = resource.read_text(encoding="utf-8")
+
+    payload = json.loads(text)
+    if not isinstance(payload, list):
+        raise ValueError("Furniture catalog must contain a JSON array")
     return [Product.model_validate(item) for item in payload]
 
 
