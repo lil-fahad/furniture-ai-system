@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "furniture-ai-system"
-version = "0.1.0"
-description = "Unified control plane for furniture and interior-design AI repositories"
+version = "0.2.0"
+description = "Unified contracts and orchestration platform for furniture and interior-design AI repositories"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
