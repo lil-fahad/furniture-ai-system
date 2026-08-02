@@ -1,0 +1,62 @@
+{
+  "generated_at": "2026-08-02T14:48:00+03:00",
+  "destination": "lil-fahad/furniture-ai-system",
+  "sources": [
+    {
+      "repository": "lil-fahad/furniture-ai-system",
+      "commit": "f317bc0ff8a4c2919664e086c1198bdbb1c4c00e",
+      "use": "contracts, security, orchestration baseline"
+    },
+    {
+      "repository": "lil-fahad/furniture_ai_suite",
+      "commit": "06199f5d3515d623aa2493efa3088481c3265406",
+      "use": "secure API, floor-plan and catalog concepts"
+    },
+    {
+      "repository": "lil-fahad/floorplan_furnisher_pro",
+      "commit": "193d1f464caf60f552905cb62045a74b0ee5b5dc",
+      "use": "constraint layout and image pipeline"
+    },
+    {
+      "repository": "lil-fahad/furniture_designer_ai",
+      "commit": "b43a2bef08a9f70bfaf189f9a6893fd14d7447c7",
+      "use": "safe local classifier and model practices"
+    },
+    {
+      "repository": "lil-fahad/Internal-designer-",
+      "commit": "69a6ca5e0c575ddfa3dcbf48a6d3c3c3cbe382f1",
+      "use": "training architecture concepts"
+    },
+    {
+      "repository": "lil-fahad/Furnishings.s",
+      "commit": "78576f5895f61a172848dca63c1542f88e5f0f57",
+      "use": "UX concepts"
+    },
+    {
+      "repository": "lil-fahad/Furnivers",
+      "commit": "62ec36ddfbbd6a11bdcc34aa38090699b0764e87",
+      "use": "3D and placement concepts"
+    },
+    {
+      "repository": "lil-fahad/home_furnishing_app",
+      "commit": "60f35fa46fdf0b9925f3350274ba7ba4b0b9ef6c",
+      "use": "catalog and commerce concepts"
+    },
+    {
+      "repository": "lil-fahad/Furnishings.app",
+      "commit": "5a4630b72718191e821cac1d269630b1beb295d6",
+      "use": "booking concepts"
+    },
+    {
+      "repository": "lil-fahad/furniture-ai-demo",
+      "commit": "0ad180ba6f448c2d4e29a6b23a3dc3ea0c5625fb",
+      "use": "product-viewer concepts"
+    }
+  ],
+  "excluded": [
+    {
+      "repository": "lil-fahad/-furniture-ai",
+      "reason": "quarantined contaminated history and exposed credential"
+    }
+  ]
+}

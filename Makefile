@@ -1,13 +1,6 @@
-.PHONY: setup sync-public sync-all test lint api
-
-setup:
-	python -m pip install -e ".[dev]"
-
-sync-public:
-	bash scripts/sync_sources.sh --public-only
-
-sync-all:
-	bash scripts/sync_sources.sh --all
+.PHONY: install test lint run ui check
+install:
+	python -m pip install -e ".[dev,ui]"
 
 test:
 	pytest
@@ -15,5 +8,10 @@ test:
 lint:
 	ruff check .
 
-api:
-	uvicorn furniture_system.main:app --host 0.0.0.0 --port 8000 --reload
+run:
+	uvicorn furniture_ai.api:app --reload
+
+ui:
+	streamlit run apps/streamlit_app.py
+
+check: lint test
