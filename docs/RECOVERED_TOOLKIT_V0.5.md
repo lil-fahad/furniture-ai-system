@@ -13,7 +13,8 @@ A separate recovered v0.5 toolkit was rebuilt from the readable ZIP directory an
 - Pretrained local models: 3 bundles, 421,713,661 bytes, size and SHA-256 verified.
 - Optional Stable Diffusion inpainting snapshot is not installed and is not claimed as present.
 - Full recovered archive SHA-256: `4079d5fd42a6ebe065c5e69813aaddae57941119a011266f449afd984439f58e`.
-- Source-only archive SHA-256: `beb410aa75575cb629d8292500deb937a910aa1678b890a9095920d43e88b3ed`.
+- Source-only archive SHA-256: `93afa4cce37083a93d225c25ff797ecd83e079d6fe9c190ba0771fa9112bf210`.
+- Wheel SHA-256: `d8e230daefe4c11482667cc8c7b8492e64efadb60b898a640e1230cde5a4b992`.
 
 ## Hardening merged into this repository
 
