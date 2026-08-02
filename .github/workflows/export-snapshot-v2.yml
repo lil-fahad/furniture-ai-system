@@ -1,0 +1,30 @@
+name: Export repository snapshot v2
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+          lfs: true
+      - name: Create source snapshot outside workspace
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/repository-snapshot.tar.gz"
+          tar --exclude='./.git' -czf "$archive" .
+          sha256sum "$archive" > "$RUNNER_TEMP/repository-snapshot.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repository-snapshot-v2
+          path: |
+            ${{ runner.temp }}/repository-snapshot.tar.gz
+            ${{ runner.temp }}/repository-snapshot.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
