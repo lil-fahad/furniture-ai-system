@@ -7,13 +7,14 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_image
+from torchvision.transforms import InterpolationMode
 from torchvision.transforms.functional import resize
 from tqdm import tqdm
 
 
 class FloorPlanDataset(Dataset):
     def __init__(self, root: Path, size: int = 512) -> None:
-        self.images = sorted((root / "images").glob("*"))
+        self.images = sorted(path for path in (root / "images").glob("*") if path.is_file())
         self.masks = root / "masks"
         self.size = size
         if not self.images:
@@ -25,8 +26,19 @@ class FloorPlanDataset(Dataset):
     def __getitem__(self, index: int):
         image_path = self.images[index]
         mask_path = self.masks / f"{image_path.stem}.png"
-        image = resize(read_image(str(image_path)).float() / 255, [self.size, self.size])
-        mask = resize(read_image(str(mask_path))[:1], [self.size, self.size]).squeeze(0).long()
+        if not mask_path.is_file():
+            raise FileNotFoundError(f"Missing segmentation mask: {mask_path}")
+        image = resize(
+            read_image(str(image_path)).float() / 255,
+            [self.size, self.size],
+            interpolation=InterpolationMode.BILINEAR,
+            antialias=True,
+        )
+        mask = resize(
+            read_image(str(mask_path))[:1],
+            [self.size, self.size],
+            interpolation=InterpolationMode.NEAREST,
+        ).squeeze(0).long()
         return image, mask
 
 
@@ -70,10 +82,17 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("models/floorplan_segmenter/unet.pt"))
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--workers", type=int, default=2)
     args = parser.parse_args()
 
     dataset = FloorPlanDataset(args.data)
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    loader = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=max(0, args.workers),
+        pin_memory=torch.cuda.is_available(),
+    )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = SmallUNet().to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)

@@ -27,6 +27,20 @@ jobs:
         run: ruff check .
       - name: Test
         run: pytest --cov=furniture_ai --cov-report=term-missing
+      - name: Build wheel
+        run: python -m build
+      - name: Installed wheel smoke test
+        run: |
+          python -m pip install --force-reinstall --no-deps dist/*.whl
+          cd /tmp
+          env -u PYTHONPATH python - <<'PY'
+          from furniture_ai.layout import load_catalog
+          from furniture_ai.models import ModelRegistry
+
+          assert load_catalog()
+          assert len(ModelRegistry().statuses()) == 2
+          print("installed wheel resources verified")
+          PY
       - name: Verify secret wiring without disclosure
         if: env.OPENAI_API_KEY != ''
         run: |

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 
 
@@ -17,11 +18,36 @@ class ModelStatus:
     notes: str
 
 
+def _sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 class ModelRegistry:
-    def __init__(self, manifest_path: Path) -> None:
-        self.manifest_path = manifest_path
-        self.base_dir = manifest_path.parent
-        self.entries = json.loads(manifest_path.read_text(encoding="utf-8"))["models"]
+    def __init__(self, manifest_path: Path = Path("models/manifest.json")) -> None:
+        candidate = Path(manifest_path)
+        if candidate.is_file():
+            self.manifest_path: Path | None = candidate
+            self.base_dir = candidate.parent
+            text = candidate.read_text(encoding="utf-8")
+        elif candidate == Path("models/manifest.json"):
+            self.manifest_path = None
+            self.base_dir = Path("models")
+            resource = resources.files("furniture_ai.resources").joinpath(
+                "model_manifest.json"
+            )
+            text = resource.read_text(encoding="utf-8")
+        else:
+            raise FileNotFoundError(f"Model manifest not found: {candidate}")
+
+        payload = json.loads(text)
+        entries = payload.get("models") if isinstance(payload, dict) else None
+        if not isinstance(entries, list):
+            raise ValueError("Model manifest must contain a models array")
+        self.entries = entries
 
     def statuses(self) -> list[ModelStatus]:
         statuses: list[ModelStatus] = []
@@ -34,8 +60,7 @@ class ModelRegistry:
             if present:
                 size = path.stat().st_size
                 if expected:
-                    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-                    verified = digest == expected
+                    verified = _sha256(path) == expected
             statuses.append(
                 ModelStatus(
                     id=entry["id"],
