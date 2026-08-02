@@ -1,0 +1,46 @@
+{
+  "status": "partial_recovery",
+  "source_release": "FurnitureAI Professional Models v0.4 multipart ZIP",
+  "logical_part_size_bytes": 99614720,
+  "missing_logical_part": 0,
+  "missing_logical_range_bytes": [
+    0,
+    99614719
+  ],
+  "archive_entries_total": 5178,
+  "entries_with_headers_in_missing_range": 4916,
+  "entries_with_headers_in_recovered_range": 262,
+  "uncompressed_bytes_missing_entries": 148226179,
+  "uncompressed_bytes_recoverable_entries": 561138048,
+  "compressed_bytes_missing_entries": 99146964,
+  "compressed_bytes_recoverable_entries": 560077028,
+  "missing_entries_by_top_level": {
+    "(root)": 5,
+    "configs": 4,
+    "data": 4907
+  },
+  "recoverable_entries_by_top_level": {
+    "(root)": 2,
+    "data": 169,
+    "docs": 6,
+    "licenses": 1,
+    "models": 22,
+    "reports": 20,
+    "src": 29,
+    "tests": 13
+  },
+  "uploaded_duplicate": {
+    "first_name": "FurnitureAI_Professional_Models_v0.4.zip.000.part",
+    "second_name": "FurnitureAI_Professional_Models_v0.4.zip.001(2).part",
+    "size_bytes": 99614720,
+    "sha256": "4567db9469bbf18a6cc2042b8da45710b2631da9eb6228df77dfb7d119fb983b",
+    "identical": true
+  },
+  "verified_recovered_model_bytes": 421713661,
+  "limitations": [
+    "The original first logical archive segment was not available.",
+    "Training datasets and root files whose local headers begin in the missing range cannot be recovered byte-for-byte.",
+    "Configuration and packaging files were reconstructed and are marked as v0.5 changes.",
+    "Recovered metrics are retained as historical artifacts but their absent source datasets cannot be independently re-evaluated from this package alone."
+  ]
+}
