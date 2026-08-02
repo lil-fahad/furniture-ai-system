@@ -21,3 +21,6 @@ models/**/*.safetensors
 .DS_Store
 .idea/
 .vscode/
+models/professional/installed/
+*.zip
+*.part

@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "id": "furnitureai-professional-models-v0.4.1-repaired",
+  "name": "FurnitureAI Professional Models v0.4.1 Repaired",
+  "archive_filename": "FurnitureAI_Professional_Models_v0.4.1_REPAIRED.zip",
+  "archive_size_bytes": 564218692,
+  "archive_sha256": "6b9cba60ef3cf86cfc5a04620e00f9c55caa08a82b6184fb1c955be46fb47e10",
+  "source_status": "repaired_from_damaged_split_archive",
+  "integrity_note": "The original first 95 MiB segment was unavailable. This repaired archive preserves all verified model files, regenerates synthetic floorplans, and does not claim byte identity with the damaged v0.4 archive.",
+  "install_root": "models/professional/installed",
+  "files": [
+    {
+      "archive_path": "models/pretrained/depth_anything_v2_small/README.md",
+      "target_path": "pretrained/depth_anything_v2_small/README.md",
+      "size_bytes": 4400,
+      "sha256": "319566441daaac0c5ed83e75a8fd19bae0863f3275e23f147c06fe0906edf6fb"
+    },
+    {
+      "archive_path": "models/pretrained/depth_anything_v2_small/config.json",
+      "target_path": "pretrained/depth_anything_v2_small/config.json",
+      "size_bytes": 950,
+      "sha256": "c56698d3643dde1f83ea2212759e6b31a22b8f827246a36dd007ee8a22b3ff75"
+    },
+    {
+      "archive_path": "models/pretrained/depth_anything_v2_small/model.safetensors",
+      "target_path": "pretrained/depth_anything_v2_small/model.safetensors",
+      "size_bytes": 99173660,
+      "sha256": "3152477ce0d8d6978d76b995120de97cb5b928701fd0f817769f59e249a16b70"
+    },
+    {
+      "archive_path": "models/pretrained/depth_anything_v2_small/preprocessor_config.json",
+      "target_path": "pretrained/depth_anything_v2_small/preprocessor_config.json",
+      "size_bytes": 775,
+      "sha256": "d41175c0d889477ca8fc67191e540faef14baf6275157b3fdecf78469e6bbf84"
+    },
+    {
+      "archive_path": "models/pretrained/detr_resnet50/README.md",
+      "target_path": "pretrained/detr_resnet50/README.md",
+      "size_bytes": 5891,
+      "sha256": "bc7d74d96a9101113c06be3a90975510dd19671382eb6fdfc5d1edbb042a723b"
+    },
+    {
+      "archive_path": "models/pretrained/detr_resnet50/config.json",
+      "target_path": "pretrained/detr_resnet50/config.json",
+      "size_bytes": 4592,
+      "sha256": "e7bcf3992363f27717a863f14b193140ad2e41d4338ee012730e58a92cae17e6"
+    },
+    {
+      "archive_path": "models/pretrained/detr_resnet50/model.safetensors",
+      "target_path": "pretrained/detr_resnet50/model.safetensors",
+      "size_bytes": 166587896,
+      "sha256": "830f5e2eeaada8c8c8281779dcc8ab12833972eb8514ed0a35be6c1d4420ad81"
+    },
+    {
+      "archive_path": "models/pretrained/detr_resnet50/preprocessor_config.json",
+      "target_path": "pretrained/detr_resnet50/preprocessor_config.json",
+      "size_bytes": 290,
+      "sha256": "0673fea2a6d3cf92cdbab3c7426c0ecdf8a4729a2a4d5199033dcd66a2b8759b"
+    },
+    {
+      "archive_path": "models/pretrained/models.lock.json",
+      "target_path": "pretrained/models.lock.json",
+      "size_bytes": 3215,
+      "sha256": "4dcbc8fbf6262fbb65abf596d4b92e6af3fe4632966cbb05ce4f3cf26790f0d3"
+    },
+    {
+      "archive_path": "models/pretrained/sam2_1_hiera_tiny/README.md",
+      "target_path": "pretrained/sam2_1_hiera_tiny/README.md",
+      "size_bytes": 19965,
+      "sha256": "dfa401b1b9358b9650ae487dd2f2bb336fd745c3609e3244adf2e97a22343857"
+    },
+    {
+      "archive_path": "models/pretrained/sam2_1_hiera_tiny/config.json",
+      "target_path": "pretrained/sam2_1_hiera_tiny/config.json",
+      "size_bytes": 5695,
+      "sha256": "860aff9751b139d83a4ad7df1e5535416fded533e0ead02625edbefcb9953cce"
+    },
+    {
+      "archive_path": "models/pretrained/sam2_1_hiera_tiny/model.safetensors",
+      "target_path": "pretrained/sam2_1_hiera_tiny/model.safetensors",
+      "size_bytes": 155908064,
+      "sha256": "48c14467e5cf9e51870511feb72c89688e82dd74523142c0538b663e193ac2a7"
+    },
+    {
+      "archive_path": "models/pretrained/sam2_1_hiera_tiny/preprocessor_config.json",
+      "target_path": "pretrained/sam2_1_hiera_tiny/preprocessor_config.json",
+      "size_bytes": 683,
+      "sha256": "6ebf229ee259368ce4a8d4f2fe893a72b053023710853e257253939e601f583d"
+    },
+    {
+      "archive_path": "models/pretrained/sam2_1_hiera_tiny/processor_config.json",
+      "target_path": "pretrained/sam2_1_hiera_tiny/processor_config.json",
+      "size_bytes": 95,
+      "sha256": "f8a68e865cfad115c1c2763f3d93eca7b1c622da06da2a9273eb437fb2389b6d"
+    },
+    {
+      "archive_path": "models/pretrained/sam2_1_hiera_tiny/video_preprocessor_config.json",
+      "target_path": "pretrained/sam2_1_hiera_tiny/video_preprocessor_config.json",
+      "size_bytes": 705,
+      "sha256": "9fccfe5f464ec38c2f236d0e6a68e95511c80c22132fc2fa4b9f7b65f24fad95"
+    },
+    {
+      "archive_path": "models/efficientnet_b0/efficientnet_b0_best.pt",
+      "target_path": "efficientnet_b0/efficientnet_b0_best.pt",
+      "size_bytes": 16390469,
+      "sha256": "983d2f3870e6561724067ab6a89ac2a77749d7b7710afc9664766c7082857cd0"
+    },
+    {
+      "archive_path": "models/efficientnet_b0/evaluation_detailed.json",
+      "target_path": "efficientnet_b0/evaluation_detailed.json",
+      "size_bytes": 3266,
+      "sha256": "52013484ef8f06be7c0cd04eca4d16f5052d61462831aba9a0fb24a19046a4fc"
+    },
+    {
+      "archive_path": "models/efficientnet_b0/metrics.json",
+      "target_path": "efficientnet_b0/metrics.json",
+      "size_bytes": 2157,
+      "sha256": "0e5e3f6a393ed69c6bb57e1fb6700a403b482ddee5dad2bf2a238352023b19f2"
+    },
+    {
+      "archive_path": "models/efficientnet_b0_multiview/efficientnet_b0_best.pt",
+      "target_path": "efficientnet_b0_multiview/efficientnet_b0_best.pt",
+      "size_bytes": 48758913,
+      "sha256": "c0609c87c86218644fa9356e26990d6d6171827acd0bdfc7e37a5e30a2a717eb"
+    },
+    {
+      "archive_path": "models/efficientnet_b0_multiview/efficientnet_b0_last.pt",
+      "target_path": "efficientnet_b0_multiview/efficientnet_b0_last.pt",
+      "size_bytes": 48758913,
+      "sha256": "2f4a983a82237a5a22c9718ca43ae86b72e0fc82fcf48ad84e64885aff74b092"
+    },
+    {
+      "archive_path": "models/efficientnet_b0_multiview/evaluation_detailed.json",
+      "target_path": "efficientnet_b0_multiview/evaluation_detailed.json",
+      "size_bytes": 3326,
+      "sha256": "9d4b1de28ea037f6b0369f33e5141b620b1bcaa56e5639b6380303d8968035b8"
+    },
+    {
+      "archive_path": "models/efficientnet_b0_multiview/metrics.json",
+      "target_path": "efficientnet_b0_multiview/metrics.json",
+      "size_bytes": 1274,
+      "sha256": "717e9ec6958259072173807a45beb117d666f0b8d7b964ad424579490cdb2f3f"
+    }
+  ]
+}
