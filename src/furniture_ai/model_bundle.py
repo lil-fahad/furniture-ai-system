@@ -164,7 +164,10 @@ def install_bundle(
     destination = destination.resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="furniture-models-", dir=destination.parent) as temp_dir:
+    with tempfile.TemporaryDirectory(
+        prefix="furniture-models-",
+        dir=destination.parent,
+    ) as temp_dir:
         staging = Path(temp_dir) / "professional"
         staging.mkdir(parents=True)
         with zipfile.ZipFile(archive_path) as archive:
