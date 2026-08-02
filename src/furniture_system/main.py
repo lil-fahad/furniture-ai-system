@@ -7,6 +7,8 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 
 from furniture_system import __version__
+from furniture_system.contracts import ExecutionPlan, FloorPlanAnalysis, PlanRequest
+from furniture_system.orchestrator import PlanningError, build_execution_plan
 from furniture_system.registry import RegistryError, SourceRegistry
 
 Tier = Literal["core", "experimental", "legacy", "private", "blocked"]
@@ -44,8 +46,8 @@ app = FastAPI(
     title="Furniture AI System",
     version=__version__,
     description=(
-        "Unified discovery and governance API for the furniture and interior-design "
-        "repositories in this monorepo."
+        "Unified contracts, orchestration, discovery, and governance API for the furniture "
+        "and interior-design repositories in this monorepo."
     ),
 )
 
@@ -53,10 +55,16 @@ app = FastAPI(
 @app.get("/health", tags=["system"])
 def health() -> dict[str, object]:
     try:
-        summary = get_registry().summary()
+        registry = get_registry()
+        summary = registry.summary()
     except RegistryError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return {"status": "ok", "version": __version__, "registry": summary}
+    return {
+        "status": "ok",
+        "version": __version__,
+        "registry": summary,
+        "contracts": {"floor_plan_analysis": "1.0"},
+    }
 
 
 @app.get("/api/v1/components", response_model=list[SourceResponse], tags=["registry"])
@@ -84,6 +92,19 @@ def component(source_id: str) -> SourceResponse:
 @app.get("/api/v1/capabilities", tags=["registry"])
 def capabilities() -> dict[str, list[str]]:
     return get_registry().capabilities()
+
+
+@app.post("/api/v1/plans", response_model=ExecutionPlan, tags=["orchestration"])
+def create_plan(request: PlanRequest) -> ExecutionPlan:
+    try:
+        return build_execution_plan(get_registry(), request)
+    except PlanningError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/schemas/floor-plan-analysis", tags=["contracts"])
+def floor_plan_analysis_schema() -> dict[str, object]:
+    return FloorPlanAnalysis.model_json_schema()
 
 
 @app.get("/api/v1/security", tags=["governance"])
