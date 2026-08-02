@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "checkpoints": [
+    {
+      "id": "efficientnet_b0-efficientnet_b0_best",
+      "architecture": "efficientnet_b0",
+      "task": "furniture_classification",
+      "path": "efficientnet_b0/efficientnet_b0_best.pt",
+      "size_bytes": 16390469,
+      "sha256": "983d2f3870e6561724067ab6a89ac2a77749d7b7710afc9664766c7082857cd0",
+      "classes": [
+        "bed",
+        "cabinet",
+        "chair",
+        "desk",
+        "dresser",
+        "lamp",
+        "ottoman",
+        "rug",
+        "shelf",
+        "sofa",
+        "stool",
+        "table"
+      ],
+      "input_size": 224,
+      "test_accuracy": 0.77381,
+      "test_macro_f1": 0.742626,
+      "dataset": "data/curated/abo_starter/images/test",
+      "preprocessing": "square_pad_white_then_resize_224",
+      "source_bundle": "furnitureai-professional-models-v0.4.1-repaired"
+    },
+    {
+      "id": "efficientnet_b0_multiview-efficientnet_b0_best",
+      "architecture": "efficientnet_b0",
+      "task": "furniture_classification",
+      "path": "efficientnet_b0_multiview/efficientnet_b0_best.pt",
+      "size_bytes": 48758913,
+      "sha256": "c0609c87c86218644fa9356e26990d6d6171827acd0bdfc7e37a5e30a2a717eb",
+      "classes": [
+        "bed",
+        "cabinet",
+        "chair",
+        "desk",
+        "dresser",
+        "lamp",
+        "ottoman",
+        "rug",
+        "shelf",
+        "sofa",
+        "stool",
+        "table"
+      ],
+      "input_size": 224,
+      "test_accuracy": 0.659751,
+      "test_macro_f1": 0.651498,
+      "dataset": "data/curated/abo_multiview/images/test",
+      "preprocessing": "square_pad_white_then_resize_224",
+      "source_bundle": "furnitureai-professional-models-v0.4.1-repaired"
+    },
+    {
+      "id": "efficientnet_b0_multiview-efficientnet_b0_last",
+      "architecture": "efficientnet_b0",
+      "task": "furniture_classification",
+      "path": "efficientnet_b0_multiview/efficientnet_b0_last.pt",
+      "size_bytes": 48758913,
+      "sha256": "2f4a983a82237a5a22c9718ca43ae86b72e0fc82fcf48ad84e64885aff74b092",
+      "classes": [
+        "bed",
+        "cabinet",
+        "chair",
+        "desk",
+        "dresser",
+        "lamp",
+        "ottoman",
+        "rug",
+        "shelf",
+        "sofa",
+        "stool",
+        "table"
+      ],
+      "input_size": 224,
+      "test_accuracy": null,
+      "test_macro_f1": null,
+      "dataset": "data/curated/abo_multiview/images/test",
+      "preprocessing": "square_pad_white_then_resize_224",
+      "source_bundle": "furnitureai-professional-models-v0.4.1-repaired"
+    }
+  ]
+}
