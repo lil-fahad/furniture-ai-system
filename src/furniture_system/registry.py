@@ -23,7 +23,7 @@ class Source:
     path: str | None = None
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "Source":
+    def from_dict(cls, raw: dict[str, Any]) -> Source:
         return cls(
             id=str(raw["id"]),
             repository=str(raw["repository"]),
@@ -59,7 +59,7 @@ class SourceRegistry:
         self._validate()
 
     @classmethod
-    def load(cls, path: str | Path | None = None) -> "SourceRegistry":
+    def load(cls, path: str | Path | None = None) -> SourceRegistry:
         configured = os.getenv("FURNITURE_SOURCES_FILE")
         source_path = cls._resolve_path(path=path, configured=configured)
         try:
