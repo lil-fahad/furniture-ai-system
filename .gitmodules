@@ -1,0 +1,27 @@
+[submodule "components/furniture_ai_suite"]
+	path = components/furniture_ai_suite
+	url = https://github.com/lil-fahad/furniture_ai_suite.git
+[submodule "components/floorplan_furnisher_pro"]
+	path = components/floorplan_furnisher_pro
+	url = https://github.com/lil-fahad/floorplan_furnisher_pro.git
+[submodule "components/furniture_designer_ai"]
+	path = components/furniture_designer_ai
+	url = https://github.com/lil-fahad/furniture_designer_ai.git
+[submodule "components/internal_designer"]
+	path = components/internal_designer
+	url = https://github.com/lil-fahad/Internal-designer-.git
+[submodule "legacy/furnishings_streamlit"]
+	path = legacy/furnishings_streamlit
+	url = https://github.com/lil-fahad/Furnishings.s.git
+[submodule "legacy/furnivers"]
+	path = legacy/furnivers
+	url = https://github.com/lil-fahad/Furnivers.git
+[submodule "private/home_furnishing_app"]
+	path = private/home_furnishing_app
+	url = https://github.com/lil-fahad/home_furnishing_app.git
+[submodule "private/furnishings_app"]
+	path = private/furnishings_app
+	url = https://github.com/lil-fahad/Furnishings.app.git
+[submodule "private/furniture_ai_demo"]
+	path = private/furniture_ai_demo
+	url = https://github.com/lil-fahad/furniture-ai-demo.git
