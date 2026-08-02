@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from enum import StrEnum
-from typing import Annotated
+import enum
+import typing
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-NonNegativeFloat = Annotated[float, Field(ge=0)]
-Confidence = Annotated[float, Field(ge=0, le=1)]
+NonNegativeFloat = typing.Annotated[float, Field(ge=0)]
+Confidence = typing.Annotated[float, Field(ge=0, le=1)]
 
 
-class Unit(StrEnum):
+class Unit(enum.StrEnum):
     PIXEL = "px"
     CENTIMETER = "cm"
     METER = "m"
@@ -36,7 +36,7 @@ class BoundingBox(BaseModel):
         return self.width * self.height
 
 
-class OpeningKind(StrEnum):
+class OpeningKind(enum.StrEnum):
     DOOR = "door"
     WINDOW = "window"
 
