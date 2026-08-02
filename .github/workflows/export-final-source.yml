@@ -1,0 +1,67 @@
+name: Export final source snapshot
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pinned source
+        uses: actions/checkout@v4
+        with:
+          ref: f317bc0ff8a4c2919664e086c1198bdbb1c4c00e
+          fetch-depth: 1
+          lfs: true
+          submodules: false
+          path: source
+
+      - name: Scan source for common credential patterns
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RIlE --binary-files=without-match \
+            --exclude-dir=.git --exclude='.env' --exclude='.env.local' \
+            'sk-proj-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{50,}|AKIA[0-9A-Z]{16}|LTAI[A-Za-z0-9]{12,}|-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----' \
+            source; then
+            echo 'Potential credential found; refusing to export.' >&2
+            exit 1
+          fi
+
+      - name: Build verified archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/export"
+          mkdir -p "$out"
+          cat > "$out/manifest.json" <<'JSON'
+          {
+            "repository": "lil-fahad/furniture-ai-system",
+            "commit": "f317bc0ff8a4c2919664e086c1198bdbb1c4c00e",
+            "history_included": false,
+            "submodule_contents_included": false,
+            "sensitive_local_files_excluded": true
+          }
+          JSON
+          tar -C source \
+            --exclude='.git' --exclude='.env' --exclude='.env.local' \
+            --exclude='.env.*.local' --exclude='.env.production' \
+            --exclude='.env.development' --exclude='.env.test' \
+            --exclude='*.pem' --exclude='*.key' --exclude='id_rsa*' \
+            --exclude='credentials*.json' --exclude='secrets*.json' \
+            --exclude='node_modules' --exclude='.venv' --exclude='venv' \
+            --exclude='__pycache__' --exclude='.pytest_cache' --exclude='.ruff_cache' \
+            -czf "$out/furniture-ai-system.tar.gz" .
+          sha256sum "$out/furniture-ai-system.tar.gz" > "$out/furniture-ai-system.sha256"
+
+      - name: Upload verified source
+        uses: actions/upload-artifact@v4
+        with:
+          name: furniture-ai-system-source
+          path: ${{ runner.temp }}/export/*
+          retention-days: 7
+          if-no-files-found: error
