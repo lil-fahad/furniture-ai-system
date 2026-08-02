@@ -1,36 +1,53 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T13:27:00+03:00",
+  "generated_at": "2026-08-02T14:30:00+03:00",
   "scope": "Furniture and interior-design repositories accessible through the connected lil-fahad GitHub installation",
   "sources": [
     {
       "id": "classification-suite",
       "repository": "lil-fahad/furniture_ai_suite",
-      "commit": "7d93fd1baa95d90b80355a26c9bebcd039d235bf",
+      "commit": "06199f5d3515d623aa2493efa3088481c3265406",
       "path": "components/furniture_ai_suite",
       "visibility": "public",
       "tier": "core",
-      "capabilities": ["classification", "floor-plan-analysis", "recommendations", "fastapi", "streamlit"],
+      "capabilities": [
+        "classification",
+        "floor-plan-analysis",
+        "recommendations",
+        "fastapi",
+        "streamlit"
+      ],
       "review": "Integrate as a component. Treat Alibaba responses as demo/mock until replaced by an authorized provider."
     },
     {
       "id": "floorplan-engine",
       "repository": "lil-fahad/floorplan_furnisher_pro",
-      "commit": "298ece57e2f4058cab255d7749bcddf935e24dba",
+      "commit": "193d1f464caf60f552905cb62045a74b0ee5b5dc",
       "path": "components/floorplan_furnisher_pro",
       "visibility": "public",
       "tier": "core",
-      "capabilities": ["segmentation", "vectorization", "constraint-layout", "fastapi", "streamlit"],
+      "capabilities": [
+        "segmentation",
+        "vectorization",
+        "constraint-layout",
+        "fastapi",
+        "streamlit"
+      ],
       "review": "Best current floor-plan pipeline. Replace default JWT secret and wildcard CORS before deployment."
     },
     {
       "id": "vision-prototypes",
       "repository": "lil-fahad/furniture_designer_ai",
-      "commit": "76da02c4d4af4d74c8f0a0241865cfa037c5d5c2",
+      "commit": "b43a2bef08a9f70bfaf189f9a6893fd14d7447c7",
       "path": "components/furniture_designer_ai",
       "visibility": "public",
       "tier": "experimental",
-      "capabilities": ["segment-anything", "room-classification", "layout-planning", "visualization"],
+      "capabilities": [
+        "segment-anything",
+        "room-classification",
+        "layout-planning",
+        "visualization"
+      ],
       "review": "Research prototype. Current layout action uses a random state and must not be treated as trained inference."
     },
     {
@@ -40,7 +57,13 @@
       "path": "components/internal_designer",
       "visibility": "public",
       "tier": "experimental",
-      "capabilities": ["pix2pix", "tensorflow", "streaming-data", "yolo-training", "flask"],
+      "capabilities": [
+        "pix2pix",
+        "tensorflow",
+        "streaming-data",
+        "yolo-training",
+        "flask"
+      ],
       "review": "Keep isolated as a generative research lab. README explicitly notes synthetic/demo behavior."
     },
     {
@@ -50,7 +73,11 @@
       "path": "legacy/furnishings_streamlit",
       "visibility": "public",
       "tier": "legacy",
-      "capabilities": ["streamlit", "catalog-demo", "designer-booking"],
+      "capabilities": [
+        "streamlit",
+        "catalog-demo",
+        "designer-booking"
+      ],
       "review": "Retain for UX reference only; room detection is simulated and catalog data comes from a generic demo API."
     },
     {
@@ -60,7 +87,12 @@
       "path": "legacy/furnivers",
       "visibility": "public",
       "tier": "legacy",
-      "capabilities": ["ocr", "streamlit", "simple-placement", "3d-prototype"],
+      "capabilities": [
+        "ocr",
+        "streamlit",
+        "simple-placement",
+        "3d-prototype"
+      ],
       "review": "Retain as concept history. Placement is randomized and examples are not production algorithms."
     },
     {
@@ -70,7 +102,13 @@
       "path": "private/home_furnishing_app",
       "visibility": "private",
       "tier": "private",
-      "capabilities": ["react", "node", "mongodb", "authentication", "commerce"],
+      "capabilities": [
+        "react",
+        "node",
+        "mongodb",
+        "authentication",
+        "commerce"
+      ],
       "review": "Private product application. Requires authenticated submodule access."
     },
     {
@@ -80,7 +118,13 @@
       "path": "private/furnishings_app",
       "visibility": "private",
       "tier": "private",
-      "capabilities": ["node", "mongodb", "jwt", "catalog", "booking"],
+      "capabilities": [
+        "node",
+        "mongodb",
+        "jwt",
+        "catalog",
+        "booking"
+      ],
       "review": "Private backend. Keep secrets in environment variables and do not publish its source through this public repository."
     },
     {
@@ -90,7 +134,10 @@
       "path": "private/furniture_ai_demo",
       "visibility": "private",
       "tier": "private",
-      "capabilities": ["static-demo", "github-pages"],
+      "capabilities": [
+        "static-demo",
+        "github-pages"
+      ],
       "review": "Private lightweight demo. Authentication is required to initialize the submodule."
     },
     {
@@ -99,7 +146,13 @@
       "commit": "f2e90a2fb8ff48129670eda06b657a9cb33b449b",
       "visibility": "public",
       "tier": "blocked",
-      "capabilities": ["fastapi", "react", "catalog", "layout", "automation"],
+      "capabilities": [
+        "fastapi",
+        "react",
+        "catalog",
+        "layout",
+        "automation"
+      ],
       "review": "Do not import. Git history contains an exposed Alibaba credential, duplicate backend trees, and placeholder/stub training paths. Rotate the credential and rewrite history before reconsideration."
     }
   ]
