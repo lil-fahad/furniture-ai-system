@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import csv
 import gzip
-import hashlib
 import io
 import json
 import math
@@ -12,12 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-import joblib
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
 DEFAULT_SUPPLIER_DATA = Path("data/suppliers_master.csv.gz.b64")
-DEFAULT_SUPPLIER_MODEL = Path("models/supplier_ranker/model.parts.json")
+DEFAULT_SUPPLIER_MODEL = Path("models/supplier_ranker/model.json")
 
 
 @dataclass(frozen=True)
@@ -127,24 +125,45 @@ def load_supplier_rows(path: Path = DEFAULT_SUPPLIER_DATA) -> list[dict[str, str
         return list(csv.DictReader(handle))
 
 
-def load_supplier_model(path: Path = DEFAULT_SUPPLIER_MODEL):
+@dataclass(frozen=True)
+class LinearSupplierModel:
+    feature_names: tuple[str, ...]
+    coefficients: tuple[float, ...]
+    intercept: float
+
+    def predict(self, rows: Iterable[dict[str, str]]) -> np.ndarray:
+        index = {name: position for position, name in enumerate(self.feature_names)}
+        predictions: list[float] = []
+        for row in rows:
+            values = np.zeros(len(self.feature_names), dtype=float)
+            for key, value in structured_features(row).items():
+                if isinstance(value, str):
+                    position = index.get(f"{key}={value}")
+                    if position is not None:
+                        values[position] = 1.0
+                else:
+                    position = index.get(key)
+                    if position is not None:
+                        values[position] = float(value)
+            predictions.append(self.intercept + float(np.dot(values, self.coefficients)))
+        return np.asarray(predictions, dtype=float)
+
+
+def load_supplier_model(path: Path = DEFAULT_SUPPLIER_MODEL) -> LinearSupplierModel:
     if not path.is_file():
         raise FileNotFoundError(path)
-    if path.name.endswith(".parts.json"):
-        manifest = json.loads(path.read_text(encoding="utf-8"))
-        encoded = "".join(
-            (path.parent / part).read_text(encoding="ascii").strip()
-            for part in manifest["parts"]
-        )
-        payload = base64.b64decode(encoded)
-        digest = hashlib.sha256(payload).hexdigest()
-        if digest != manifest["binary_sha256"] or len(payload) != manifest["binary_size_bytes"]:
-            raise ValueError("Supplier model part verification failed")
-        return joblib.load(io.BytesIO(payload))
-    if path.suffix == ".b64":
-        payload = base64.b64decode(path.read_text(encoding="ascii"))
-        return joblib.load(io.BytesIO(payload))
-    return joblib.load(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("format") != "linear-supplier-model-v1":
+        raise ValueError("Unsupported supplier model format")
+    names = tuple(str(item) for item in payload["feature_names"])
+    coefficients = tuple(float(item) for item in payload["coefficients"])
+    if len(names) != len(coefficients):
+        raise ValueError("Supplier model feature and coefficient counts differ")
+    return LinearSupplierModel(
+        feature_names=names,
+        coefficients=coefficients,
+        intercept=float(payload["intercept"]),
+    )
 
 
 def _preference_adjustment(row: dict[str, str], preference: SupplierPreference) -> float:
