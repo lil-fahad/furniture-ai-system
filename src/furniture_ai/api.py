@@ -8,7 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from furniture_ai import __version__
 from furniture_ai.config import Settings, get_settings
-from furniture_ai.contracts import Booking, BookingCreate, DesignResult, LayoutRequest, Product
+from furniture_ai.contracts import (
+    Booking,
+    BookingCreate,
+    DesignResult,
+    LayoutRequest,
+    Product,
+    SupplierRecommendation,
+)
 from furniture_ai.image_io import ImageValidationError, load_validated_image
 from furniture_ai.layout import furnish_floor_plan, load_catalog
 from furniture_ai.models import ModelRegistry
@@ -39,6 +46,20 @@ def get_booking_store() -> BookingStore:
     return BookingStore(get_settings().database_path)
 
 
+@lru_cache(maxsize=1)
+def get_supplier_rows() -> list[dict[str, str]]:
+    from furniture_ai.supplier_ranker import load_supplier_rows
+
+    return load_supplier_rows(get_settings().supplier_data_path)
+
+
+@lru_cache(maxsize=1)
+def get_supplier_model():
+    from furniture_ai.supplier_ranker import load_supplier_model
+
+    return load_supplier_model(get_settings().supplier_model_path)
+
+
 @app.get("/health", tags=["system"])
 def health() -> dict[str, object]:
     active = get_settings()
@@ -61,10 +82,13 @@ def ready() -> dict[str, object]:
             status_code=503,
             detail="Application dependencies are not ready",
         ) from exc
+    active = get_settings()
     return {
         "status": "ready",
         "models_present": sum(status.present for status in model_statuses),
         "models_registered": len(model_statuses),
+        "supplier_data_present": active.supplier_data_path.is_file(),
+        "supplier_ranker_present": active.supplier_model_path.is_file(),
     }
 
 
@@ -116,6 +140,44 @@ def catalog(room_type: str | None = Query(default=None)) -> list[Product]:
 def models(active_settings: Annotated[Settings, Depends(get_settings)]) -> list[dict[str, object]]:
     registry = ModelRegistry(active_settings.model_manifest_path)
     return [status.__dict__ for status in registry.statuses()]
+
+
+@app.get(
+    "/api/v1/suppliers/recommend",
+    response_model=list[SupplierRecommendation],
+    tags=["suppliers"],
+)
+def recommend_suppliers(
+    category: str | None = Query(default=None, max_length=100),
+    requires_dropshipping: bool = Query(default=False),
+    requires_3d_models: bool = Query(default=False),
+    requires_direct_fulfillment: bool = Query(default=False),
+    max_lead_days: float | None = Query(default=None, gt=0),
+    max_moq: float | None = Query(default=None, gt=0),
+    max_price: float | None = Query(default=None, gt=0),
+    top_k: int = Query(default=10, ge=1, le=41),
+) -> list[SupplierRecommendation]:
+    try:
+        from furniture_ai.supplier_ranker import SupplierPreference, rank_suppliers
+
+        preference = SupplierPreference(
+            category=category,
+            requires_dropshipping=requires_dropshipping,
+            requires_3d_models=requires_3d_models,
+            requires_direct_fulfillment=requires_direct_fulfillment,
+            max_lead_days=max_lead_days,
+            max_moq=max_moq,
+            max_price=max_price,
+        )
+        results = rank_suppliers(
+            get_supplier_rows(),
+            get_supplier_model(),
+            preference=preference,
+            top_k=top_k,
+        )
+    except (FileNotFoundError, ImportError, OSError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail="Supplier ranker is unavailable") from exc
+    return [SupplierRecommendation.model_validate(item) for item in results]
 
 
 @app.post(

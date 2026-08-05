@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "trained_at": "2026-08-05",
+  "seed": 20260805,
+  "records": 41,
+  "target": "Suitability Score",
+  "model": "Ridge",
+  "alpha": 0.1,
+  "leave_one_out": {
+    "mae": 3.717116470168097,
+    "rmse": 5.094441236217737,
+    "r2": 0.05506713738157987,
+    "rank_correlation": 0.45243902439024397
+  },
+  "repeated_5_fold_5_repeats": {
+    "mae_mean": 4.06503737031294,
+    "mae_std": 1.2028639642674017,
+    "rmse_mean": 5.5107678497922405,
+    "rmse_std": 1.5754232126503678
+  },
+  "median_baseline_leave_one_out": {
+    "mae": 4.048780487804878,
+    "rmse": 5.259138388116998
+  },
+  "artifact": {
+    "path": "models/supplier_ranker/model.json",
+    "size_bytes": 4477,
+    "sha256": "02494a01470a7f46311714dc56bb01d3f20b09cd6d157d088ad1c7939ef5134a",
+    "features": 83
+  },
+  "limitations": [
+    "Only 41 supplier records are available.",
+    "The target score is an expert-curated suitability score, not observed procurement outcomes.",
+    "The model is a ranking assistant and should not make autonomous purchasing decisions."
+  ]
+}

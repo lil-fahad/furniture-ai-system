@@ -20,6 +20,8 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:8501", "http://127.0.0.1:8501"]
     )
     model_manifest_path: Path = Path("models/manifest.json")
+    supplier_data_path: Path = Path("data/suppliers_master.csv.gz.b64")
+    supplier_model_path: Path = Path("models/supplier_ranker/model.json")
 
     model_config = SettingsConfigDict(
         env_file=".env",

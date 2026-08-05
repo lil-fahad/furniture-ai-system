@@ -55,3 +55,18 @@ def test_catalog_and_booking() -> None:
     )
     assert created.status_code == 200
     assert client.get("/api/v1/bookings").json()[0]["id"] == created.json()["id"]
+
+
+def test_supplier_recommendation_endpoint() -> None:
+    response = TestClient(app).get(
+        "/api/v1/suppliers/recommend",
+        params={
+            "requires_dropshipping": "true",
+            "requires_3d_models": "true",
+            "top_k": 5,
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert len(payload) == 5
+    assert payload[0]["final_score"] >= payload[-1]["final_score"]

@@ -17,6 +17,7 @@ models/**/*.pth
 models/**/*.pt
 models/**/*.onnx
 models/**/*.safetensors
+models/**/*.joblib
 !models/manifest.json
 .DS_Store
 .idea/
