@@ -9,7 +9,7 @@ from furniture_ai.models import ModelRegistry
 
 def test_model_registry_reports_missing_models_without_failure() -> None:
     statuses = ModelRegistry(Path("models/manifest.json")).statuses()
-    assert len(statuses) == 8
+    assert len(statuses) == 9
     assert {status.id for status in statuses}.issuperset(
         {
             "room-classifier-efficientnet-b0",
@@ -19,7 +19,13 @@ def test_model_registry_reports_missing_models_without_failure() -> None:
             "depth_anything_v2_small",
         }
     )
-    assert all(status.present is False for status in statuses)
+    present = {status.id: status.present for status in statuses}
+    assert present["supplier-ranker-extratrees"] is True
+    assert all(
+        not is_present
+        for model_id, is_present in present.items()
+        if model_id != "supplier-ranker-extratrees"
+    )
 
 
 def test_model_registry_verifies_size_and_hash(tmp_path: Path) -> None:
