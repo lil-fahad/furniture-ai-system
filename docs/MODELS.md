@@ -25,3 +25,10 @@ When `use_openai=true` and `OPENAI_API_KEY` is configured, the whole floor-plan 
 ## Checkpoint policy
 
 Weights are not committed by default. Put locally trained weights at paths listed in `models/manifest.json`, or install the professional bundle through the verified installer. Commit only manifests, source metadata, checksums, and evaluation summaries unless an approved artifact service or Git LFS policy is in place.
+
+
+## Supplier suitability ranker
+
+`training/train_supplier_ranker.py` trains an `ExtraTreesRegressor` on `data/suppliers_master.csv`. The committed model lives at `models/supplier_ranker/model.parts.json`; validation metrics and predictions are in `models/supplier_ranker/metrics.json` and `reports/`.
+
+The ranker predicts the curated suitability score from structured supplier attributes. Runtime preference adjustments remain explicit and inspectable. It must not make autonomous purchasing or compliance decisions.

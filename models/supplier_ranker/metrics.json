@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "trained_at": "2026-08-05",
+  "seed": 20260805,
+  "records": 41,
+  "target": "Suitability Score",
+  "model": "ExtraTreesRegressor",
+  "leave_one_out": {
+    "mae": 3.9545017421602817,
+    "rmse": 4.79886514024266,
+    "r2": 0.16153501728067876,
+    "rank_correlation": 0.44303135888501755
+  },
+  "repeated_5_fold_5_repeats": {
+    "mae_mean": 3.585035324074072,
+    "mae_std": 0.676491490317951,
+    "rmse_mean": 4.435970401816651,
+    "rmse_std": 0.7773081048505179
+  },
+  "median_baseline_leave_one_out": {
+    "mae": 4.048780487804878,
+    "rmse": 5.259138388116998
+  },
+  "limitations": [
+    "Only 41 supplier records are available.",
+    "The target score is an expert-curated suitability score, not observed procurement outcomes.",
+    "The model is a ranking assistant and should not make autonomous purchasing decisions."
+  ],
+  "artifact": {
+    "binary_path": "models/supplier_ranker/model.joblib",
+    "binary_size_bytes": 96432,
+    "binary_sha256": "45ee9642c7ce8d59a86fb9ddcf184c3905f8c2ad23119701209431009ef949b5",
+    "parts_manifest": "models/supplier_ranker/model.parts.json",
+    "parts": 9,
+    "parts_manifest_sha256": "baa36b4caca5ed39fb2d3a53420226b9426743c037bdccf0d742975dae3cb45e"
+  }
+}

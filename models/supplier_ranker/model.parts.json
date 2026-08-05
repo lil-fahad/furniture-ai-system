@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "format": "joblib-base64-parts",
+  "parts": [
+    "model.part000.b64",
+    "model.part001.b64",
+    "model.part002.b64",
+    "model.part003.b64",
+    "model.part004.b64",
+    "model.part005.b64",
+    "model.part006.b64",
+    "model.part007.b64",
+    "model.part008.b64"
+  ],
+  "binary_size_bytes": 96432,
+  "binary_sha256": "45ee9642c7ce8d59a86fb9ddcf184c3905f8c2ad23119701209431009ef949b5"
+}

@@ -10,6 +10,7 @@ A single production-oriented repository for interior-design automation. It repla
 - Optional OpenAI vision refinement and design briefs through `OPENAI_API_KEY`.
 - Product catalog and persistent SQLite booking service.
 - Verified external professional model bundle with safe installation and lazy use.
+- Trained supplier suitability ranker and preference-aware supplier recommendations.
 - Optional DETR, SAM 2.1, Depth Anything V2, and trained EfficientNet-B0 checkpoints.
 - Reproducible training scripts and model manifests.
 - FastAPI, Streamlit, Docker, CI, repository audits, and security tests.
@@ -49,6 +50,24 @@ python scripts/model_manifest.py
 ```
 
 See `docs/PROFESSIONAL_MODELS.md` for confirmed sources, revisions, licenses, metrics, and repair limitations.
+
+
+## Supplier recommendation
+
+The repository includes a trained supplier suitability ranker based on the cleaned 41-supplier database. It predicts a suitability prior and then applies transparent preference adjustments for category, dropshipping, 3D availability, direct fulfillment, lead time, MOQ, and price.
+
+```bash
+python training/train_supplier_ranker.py
+uvicorn furniture_ai.api:app --host 0.0.0.0 --port 8000
+```
+
+Example endpoint:
+
+```text
+GET /api/v1/suppliers/recommend?requires_dropshipping=true&requires_3d_models=true&top_k=10
+```
+
+The model is intentionally limited to shortlisting. Its training target is an expert-curated score rather than observed procurement outcomes.
 
 ## Secrets
 
