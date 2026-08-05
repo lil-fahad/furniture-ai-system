@@ -7,9 +7,10 @@ import io
 import json
 import math
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
