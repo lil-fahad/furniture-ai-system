@@ -115,3 +115,24 @@ class Booking(BookingCreate):
     id: int
     status: str
     created_at: str
+
+
+class SupplierRecommendation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    supplier_name: str
+    category: str
+    country_city: str
+    official_website: str
+    profile_link: str
+    saudi_shipping: str
+    dropshipping: str
+    models_3d: str
+    lead_time: str
+    moq: str
+    price_range: str
+    model_score: float
+    preference_adjustment: float
+    final_score: float
+    reference_score: float
+    key_strengths: str
+    main_risks: str
