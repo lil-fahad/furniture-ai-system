@@ -172,7 +172,7 @@
       "sha256": "baa36b4caca5ed39fb2d3a53420226b9426743c037bdccf0d742975dae3cb45e",
       "size_bytes": 420,
       "required": true,
-      "source": "data/suppliers_master.csv",
+      "source": "data/suppliers_master.csv.gz.b64",
       "license": "project-data",
       "commercial_use": true,
       "notes": "Trained model stored as verified Base64 parts and decoded in memory. Trained on 41 curated supplier records. Use for shortlisting, not autonomous procurement."

@@ -54,7 +54,7 @@ def build_model(seed: int) -> Pipeline:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train the supplier suitability ranker")
-    parser.add_argument("--data", type=Path, default=Path("data/suppliers_master.csv"))
+    parser.add_argument("--data", type=Path, default=Path("data/suppliers_master.csv.gz.b64"))
     parser.add_argument(
         "--model", type=Path, default=Path("models/supplier_ranker/model.joblib")
     )

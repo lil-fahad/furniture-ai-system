@@ -29,6 +29,6 @@ Weights are not committed by default. Put locally trained weights at paths liste
 
 ## Supplier suitability ranker
 
-`training/train_supplier_ranker.py` trains an `ExtraTreesRegressor` on `data/suppliers_master.csv`. The committed model lives at `models/supplier_ranker/model.parts.json`; validation metrics and predictions are in `models/supplier_ranker/metrics.json` and `reports/`.
+`training/train_supplier_ranker.py` trains an `ExtraTreesRegressor` on `data/suppliers_master.csv.gz.b64`. The committed model lives at `models/supplier_ranker/model.parts.json`; validation metrics and predictions are in `models/supplier_ranker/metrics.json` and `reports/`.
 
 The ranker predicts the curated suitability score from structured supplier attributes. Runtime preference adjustments remain explicit and inspectable. It must not make autonomous purchasing or compliance decisions.
