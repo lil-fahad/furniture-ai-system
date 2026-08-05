@@ -20,11 +20,11 @@ def test_model_registry_reports_missing_models_without_failure() -> None:
         }
     )
     present = {status.id: status.present for status in statuses}
-    assert present["supplier-ranker-extratrees"] is True
+    assert present["supplier-ranker-ridge"] is True
     assert all(
         not is_present
         for model_id, is_present in present.items()
-        if model_id != "supplier-ranker-extratrees"
+        if model_id != "supplier-ranker-ridge"
     )
 
 

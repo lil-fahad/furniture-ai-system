@@ -54,7 +54,7 @@ See `docs/PROFESSIONAL_MODELS.md` for confirmed sources, revisions, licenses, me
 
 ## Supplier recommendation
 
-The repository includes a trained supplier suitability ranker based on the cleaned 41-supplier database. It predicts a suitability prior and then applies transparent preference adjustments for category, dropshipping, 3D availability, direct fulfillment, lead time, MOQ, and price.
+The repository includes a trained transparent supplier suitability ranker based on the cleaned 41-supplier database. It predicts a suitability prior and then applies transparent preference adjustments for category, dropshipping, 3D availability, direct fulfillment, lead time, MOQ, and price.
 
 ```bash
 python training/train_supplier_ranker.py
