@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import csv
+import gzip
 import hashlib
 import io
 import json
@@ -15,7 +16,7 @@ import joblib
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
-DEFAULT_SUPPLIER_DATA = Path("data/suppliers_master.csv")
+DEFAULT_SUPPLIER_DATA = Path("data/suppliers_master.csv.gz.b64")
 DEFAULT_SUPPLIER_MODEL = Path("models/supplier_ranker/model.parts.json")
 
 
@@ -118,6 +119,10 @@ class StructuredSupplierTransformer(BaseEstimator, TransformerMixin):
 
 
 def load_supplier_rows(path: Path = DEFAULT_SUPPLIER_DATA) -> list[dict[str, str]]:
+    if path.name.endswith(".gz.b64"):
+        compressed = base64.b64decode(path.read_text(encoding="ascii"))
+        text = gzip.decompress(compressed).decode("utf-8-sig")
+        return list(csv.DictReader(io.StringIO(text)))
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         return list(csv.DictReader(handle))
 
