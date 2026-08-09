@@ -93,10 +93,23 @@ echo "==> step 1/7: checking gcloud authentication and project access"
 # `gcloud auth list`, so validate access with a real API call instead of
 # requiring a listed account (do NOT run 'gcloud auth login' in Cloud Shell).
 ACTIVE_ACCOUNT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null || true)"
-if ! gcloud projects describe "${PROJECT}" >/dev/null 2>&1; then
+if ! DESCRIBE_ERR="$(gcloud projects describe "${PROJECT}" 2>&1 >/dev/null)"; then
     echo "error: cannot access project ${PROJECT}" >&2
+    # Print the real gcloud error verbatim so the cause is visible
+    # (UNAUTHENTICATED vs PERMISSION_DENIED vs project-not-found).
+    echo "--- gcloud projects describe ${PROJECT} (verbatim error) ---" >&2
+    echo "${DESCRIBE_ERR}" >&2
+    echo "------------------------------------------------------------" >&2
+    if [[ "${DESCRIBE_ERR}" == *UNAUTHENTICATED* ]]; then
+        echo "hint: auth broken: restart Cloud Shell session (menu > Restart) and re-run" >&2
+    elif [[ "${DESCRIBE_ERR}" == *PERMISSION_DENIED* ]]; then
+        echo "hint: your account lacks access to this project id" >&2
+    elif [[ "${DESCRIBE_ERR}" == *NOT_FOUND* || "${DESCRIBE_ERR}" == *"not found"* ]]; then
+        echo "hint: project id does not exist" >&2
+    fi
     echo "       In Cloud Shell you are already authenticated - check the project id." >&2
     echo "       Outside Cloud Shell run: gcloud auth login" >&2
+    echo "       Still stuck? Run: scripts/gcp_diagnose.sh ${PROJECT}" >&2
     exit 1
 fi
 echo "    project access OK${ACTIVE_ACCOUNT:+ (account: ${ACTIVE_ACCOUNT})}"
