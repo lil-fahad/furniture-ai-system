@@ -75,6 +75,10 @@ The launcher creates or reuses:
 - a Vertex AI `g2-standard-8` worker with one NVIDIA L4 and a 200 GB SSD boot
   disk, using the NVIDIA PyTorch 26.07 container.
 
+Cloud Build uses its default `e2-standard-2` worker so new projects do not
+require a separate high-CPU build quota. This affects only container build
+speed; Vertex training still uses the NVIDIA L4 configuration above.
+
 The 100,000-image payload is expected to be roughly 30 GB after normalization,
 but source mix, metadata, container storage, run time, and actual charges vary.
 The job is resumable: keep the same `--run-id` to continue from the manifest in
