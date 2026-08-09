@@ -26,3 +26,7 @@ models/professional/installed/
 *.zip
 *.part
 *.egg-info/
+
+# Generated datasets and their source manifests are reviewed locally; do not commit them by default.
+data/styles/
+data/style_sources.jsonl

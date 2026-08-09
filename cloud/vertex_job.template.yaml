@@ -1,0 +1,28 @@
+workerPoolSpecs:
+  - machineSpec:
+      machineType: g2-standard-8
+      acceleratorType: NVIDIA_L4
+      acceleratorCount: 1
+    replicaCount: 1
+    diskSpec:
+      bootDiskType: pd-ssd
+      bootDiskSizeGb: 200
+    containerSpec:
+      imageUri: __IMAGE_URI__
+      args:
+        - --bucket=__BUCKET__
+        - --run-id=__RUN_ID__
+        - --max-images=__MAX_IMAGES__
+        - --candidate-multiplier=4.0
+        - --epochs=30
+        - --label-batch-size=64
+        - --train-batch-size=128
+        - --download-workers=32
+        - --upload-workers=16
+        - --train-workers=8
+serviceAccount: __SERVICE_ACCOUNT__
+baseOutputDirectory:
+  outputUriPrefix: gs://__BUCKET__/runs/__RUN_ID__/vertex-output
+scheduling:
+  timeout: 86400s
+  restartJobOnWorkerRestart: true

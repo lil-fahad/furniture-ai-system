@@ -60,6 +60,8 @@ python training/train_floorplan_segmenter.py data/plans --mask-remap --epochs 1
 ```
 
 See `docs/MODELS.md` for dataset expectations and checkpoint policy.
+For licensed Hugging Face/Openverse imports and the 100,000-image Open Images
+Vertex AI/NVIDIA L4 pipeline, see `docs/STYLE_DATASET.md`.
 
 ## Install the professional models
 
