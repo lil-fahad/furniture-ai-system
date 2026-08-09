@@ -160,10 +160,12 @@ if [[ "${SKIP_IMAGE}" -eq 1 ]]; then
     echo "==> step 5/7: SKIPPED image build (--skip-image)"
 else
     echo "==> step 5/7: building training image with Cloud Build"
+    # NOTE: `gcloud builds submit` has no -f flag for a custom Dockerfile path;
+    # cloud/cloudbuild.yaml pins `docker build -f cloud/Dockerfile.training`.
     gcloud builds submit \
         --project "${PROJECT}" \
-        --tag "${IMAGE_URI}" \
-        -f cloud/Dockerfile.training \
+        --config cloud/cloudbuild.yaml \
+        --substitutions "_IMAGE_URI=${IMAGE_URI}" \
         .
 fi
 

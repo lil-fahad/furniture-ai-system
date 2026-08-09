@@ -1,0 +1,18 @@
+# Cloud Build config for the furniture-ai-system training image.
+# `gcloud builds submit` cannot select a Dockerfile path directly (no -f flag),
+# so this config pins the custom Dockerfile location explicitly.
+# Used by scripts/gcp_bootstrap.sh step 5:
+#   gcloud builds submit --config cloud/cloudbuild.yaml \
+#     --substitutions "_IMAGE_URI=<region>-docker.pkg.dev/<project>/furniture-ai/trainer:latest" .
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-f"
+      - "cloud/Dockerfile.training"
+      - "-t"
+      - "${_IMAGE_URI}"
+      - "."
+images:
+  - "${_IMAGE_URI}"
+timeout: "1800s"
