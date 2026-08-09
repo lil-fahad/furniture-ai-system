@@ -1,0 +1,36 @@
+# Training image for Vertex AI custom jobs (furniture-ai-system).
+#
+# Build (usually done by scripts/gcp_bootstrap.sh):
+#   gcloud builds submit \
+#     --tag $REGION-docker.pkg.dev/$PROJECT/furniture-ai/trainer:latest \
+#     -f cloud/Dockerfile.training .
+#
+# The container runs `python -m training.cloud_entry` and expects the
+# environment variables GCP_PROJECT, GCP_REGION, GCS_BUCKET and RUN_ID plus
+# a `--task {room,segmenter,ranker}` argument (see cloud/vertex_jobs.py).
+
+FROM us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4.py310:latest
+
+WORKDIR /app
+
+# Copy everything the trainers need: packaging metadata, source package,
+# training scripts and the (tiny) seed data files used by the ranker.
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY training ./training
+COPY data ./data
+
+# Install the repo with the [training] extra plus the GCS/Vertex clients
+# used by training.cloud_entry and training.data_ingest.
+# NOTE: the spec-mandated Vertex base image ships Python 3.10 while the repo
+# declares requires-python >= 3.11, so --ignore-requires-python is required
+# for pip to install the package on this base image.
+RUN pip install --no-cache-dir --ignore-requires-python \
+    ".[training]" \
+    "google-cloud-storage>=2.10,<3" \
+    "google-cloud-aiplatform>=1.60,<2"
+
+# Datasets are downloaded to /tmp/fai_data at runtime (SPEC §2.4).
+ENV FAI_STAGING_ROOT=/tmp/fai_data
+
+ENTRYPOINT ["python", "-m", "training.cloud_entry"]
