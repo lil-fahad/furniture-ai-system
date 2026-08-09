@@ -98,3 +98,58 @@ def test_bundle_rejects_zip_slip_member(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Unsafe relative path"):
         verify_bundle_archive(archive, spec_path)
+
+
+def test_bundle_rejects_corrupted_member_hash(tmp_path: Path) -> None:
+    archive = tmp_path / "bundle.zip"
+    content = b"model"
+    member = "models/pretrained/test/model.bin"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr(member, content)
+    spec_path = tmp_path / "bundle.json"
+    _write_spec(spec_path, archive, member, content)
+    payload = json.loads(spec_path.read_text())
+    payload["files"][0]["sha256"] = "0" * 64
+    spec_path.write_text(json.dumps(payload))
+
+    with pytest.raises(ValueError, match="Member SHA-256"):
+        verify_bundle_archive(archive, spec_path)
+
+
+def test_failed_install_preserves_existing_destination(tmp_path: Path) -> None:
+    archive = tmp_path / "bundle.zip"
+    content = b"new-model"
+    member = "models/pretrained/test/model.bin"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr(member, content)
+    spec_path = tmp_path / "bundle.json"
+    _write_spec(spec_path, archive, member, content)
+    payload = json.loads(spec_path.read_text())
+    payload["files"][0]["sha256"] = "0" * 64
+    spec_path.write_text(json.dumps(payload))
+
+    destination = tmp_path / "installed"
+    destination.mkdir()
+    (destination / "keep.txt").write_text("previous install", encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        install_bundle(archive, destination, spec_path)
+    assert (destination / "keep.txt").read_text(encoding="utf-8") == "previous install"
+
+
+def test_reinstall_replaces_previous_installation(tmp_path: Path) -> None:
+    archive = tmp_path / "bundle.zip"
+    content = b"verified-model-bytes"
+    member = "models/pretrained/test/model.bin"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr(member, content)
+    spec_path = tmp_path / "bundle.json"
+    _write_spec(spec_path, archive, member, content)
+
+    destination = tmp_path / "installed"
+    destination.mkdir()
+    (destination / "stale.txt").write_text("old", encoding="utf-8")
+
+    install_bundle(archive, destination, spec_path)
+    assert (destination / "pretrained/test/model.bin").read_bytes() == content
+    assert not (destination / "stale.txt").exists()
