@@ -7,6 +7,7 @@ BUCKET=""
 BUILD_ID=""
 MAX_IMAGES="100000"
 POLL_SECONDS="30"
+GPU="l4"
 EXECUTE=false
 REPOSITORY="furniture-ai-training"
 SERVICE_ACCOUNT_NAME="furniture-ml"
@@ -14,7 +15,7 @@ SERVICE_ACCOUNT_NAME="furniture-ml"
 usage() {
   cat <<'USAGE'
 Wait for an existing Cloud Build without exhausting the status quota, then
-submit its image as a paid Vertex AI job using one NVIDIA L4 GPU.
+submit its image as a paid Vertex AI job using one NVIDIA GPU.
 
 Usage:
   bash cloud/resume_gcp_training.sh --build-id ID --execute [options]
@@ -26,6 +27,7 @@ Options:
   --bucket NAME        Private bucket (default: furniture-ai-PROJECT)
   --max-images N       Target accepted images (default: 100000)
   --poll-seconds N     Seconds between build checks (default: 30)
+  --gpu TYPE           Accelerator: l4 or t4 (default: l4)
   --execute            Acknowledge that a billable Vertex GPU job may start
   -h, --help           Show this help
 USAGE
@@ -56,6 +58,10 @@ while (($#)); do
       ;;
     --poll-seconds)
       POLL_SECONDS="${2:?missing value for --poll-seconds}"
+      shift 2
+      ;;
+    --gpu)
+      GPU="${2:?missing value for --gpu}"
       shift 2
       ;;
     --execute)
@@ -102,12 +108,30 @@ fi
   printf '%s\n' '--poll-seconds must be an integer from 10 to 300' >&2
   exit 2
 }
+case "$GPU" in
+  l4)
+    MACHINE_TYPE="g2-standard-8"
+    ACCELERATOR_TYPE="NVIDIA_L4"
+    LABEL_BATCH_SIZE="64"
+    TRAIN_BATCH_SIZE="128"
+    ;;
+  t4)
+    MACHINE_TYPE="n1-standard-8"
+    ACCELERATOR_TYPE="NVIDIA_TESLA_T4"
+    LABEL_BATCH_SIZE="32"
+    TRAIN_BATCH_SIZE="64"
+    ;;
+  *)
+    printf '%s\n' '--gpu must be l4 or t4' >&2
+    exit 2
+    ;;
+esac
 
 if [[ "$EXECUTE" != true ]]; then
   printf '%s\n' 'Dry plan only; no Vertex AI job was submitted.'
-  printf 'project=%s region=%s build_id=%s bucket=gs://%s max_images=%s poll_seconds=%s\n' \
-    "$PROJECT" "$REGION" "$BUILD_ID" "$BUCKET" "$MAX_IMAGES" "$POLL_SECONDS"
-  printf '%s\n' 'Re-run with --execute to permit a paid NVIDIA L4 job.'
+  printf 'project=%s region=%s build_id=%s bucket=gs://%s max_images=%s poll_seconds=%s gpu=%s\n' \
+    "$PROJECT" "$REGION" "$BUILD_ID" "$BUCKET" "$MAX_IMAGES" "$POLL_SECONDS" "$GPU"
+  printf 'Re-run with --execute to permit a paid NVIDIA %s job.\n' "$GPU"
   exit 0
 fi
 
@@ -192,6 +216,10 @@ SERVICE_ACCOUNT="${SERVICE_ACCOUNT_NAME}@${PROJECT}.iam.gserviceaccount.com"
 JOB_CONFIG="$(mktemp --suffix=.yaml)"
 trap 'rm -f "$JOB_CONFIG"' EXIT
 sed \
+  -e "s|machineType: g2-standard-8|machineType: ${MACHINE_TYPE}|g" \
+  -e "s|acceleratorType: NVIDIA_L4|acceleratorType: ${ACCELERATOR_TYPE}|g" \
+  -e "s|--label-batch-size=64|--label-batch-size=${LABEL_BATCH_SIZE}|g" \
+  -e "s|--train-batch-size=128|--train-batch-size=${TRAIN_BATCH_SIZE}|g" \
   -e "s|__IMAGE_URI__|${IMAGE_URI}|g" \
   -e "s|__BUCKET__|${BUCKET}|g" \
   -e "s|__RUN_ID__|${RUN_ID}|g" \
@@ -205,6 +233,6 @@ gcloud ai custom-jobs create \
   --display-name "$RUN_ID" \
   --config "$JOB_CONFIG"
 
-printf '\nSubmitted paid Vertex AI job %s.\n' "$RUN_ID"
+printf '\nSubmitted paid Vertex AI job %s using %s.\n' "$RUN_ID" "$ACCELERATOR_TYPE"
 printf 'Dataset/checkpoints: gs://%s/runs/%s/\n' "$BUCKET" "$RUN_ID"
 printf 'Jobs: gcloud ai custom-jobs list --project %s --region %s\n' "$PROJECT" "$REGION"
