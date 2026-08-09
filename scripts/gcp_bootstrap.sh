@@ -89,13 +89,17 @@ echo "    image   : ${IMAGE_URI}"
 # Step 1: authentication + project access check
 # ---------------------------------------------------------------------------
 echo "==> step 1/7: checking gcloud authentication and project access"
+# Cloud Shell authenticates implicitly and often reports NO active account in
+# `gcloud auth list`, so validate access with a real API call instead of
+# requiring a listed account (do NOT run 'gcloud auth login' in Cloud Shell).
 ACTIVE_ACCOUNT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null || true)"
-if [[ -z "$ACTIVE_ACCOUNT" ]]; then
-    echo "error: not authenticated; run 'gcloud auth login' first" >&2
+if ! gcloud projects describe "${PROJECT}" >/dev/null 2>&1; then
+    echo "error: cannot access project ${PROJECT}" >&2
+    echo "       In Cloud Shell you are already authenticated - check the project id." >&2
+    echo "       Outside Cloud Shell run: gcloud auth login" >&2
     exit 1
 fi
-gcloud projects describe "${PROJECT}" >/dev/null
-echo "    authenticated as ${ACTIVE_ACCOUNT}"
+echo "    project access OK${ACTIVE_ACCOUNT:+ (account: ${ACTIVE_ACCOUNT})}"
 
 # ---------------------------------------------------------------------------
 # Step 2: enable required APIs (idempotent)
