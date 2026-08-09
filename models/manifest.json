@@ -162,20 +162,6 @@
       "test_accuracy": null,
       "test_macro_f1": null,
       "notes": "Recovered checkpoint with verified SHA-256. Metrics are copied from the bundle evaluation report."
-    },
-    {
-      "id": "supplier-ranker-ridge",
-      "name": "Supplier Suitability Ranker",
-      "task": "supplier-ranking",
-      "architecture": "Ridge",
-      "path": "supplier_ranker/model.json",
-      "sha256": "02494a01470a7f46311714dc56bb01d3f20b09cd6d157d088ad1c7939ef5134a",
-      "size_bytes": 4477,
-      "required": true,
-      "source": "data/suppliers_master.csv.gz.b64",
-      "license": "project-data",
-      "commercial_use": true,
-      "notes": "Transparent Ridge model stored as JSON. Trained on 41 curated supplier records. Use for shortlisting, not autonomous procurement."
     }
   ]
 }

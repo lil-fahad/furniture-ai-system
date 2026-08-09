@@ -4,13 +4,22 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # ENVIRONMENT=production requires SERVICE_API_KEY to be at least 24
+      # characters, otherwise the API refuses to start (see docs/SECURITY.md).
       ENVIRONMENT: production
-      SERVICE_API_KEY: ${SERVICE_API_KEY:?set SERVICE_API_KEY}
+      SERVICE_API_KEY: ${SERVICE_API_KEY:?set SERVICE_API_KEY (min 24 characters)}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
       DATABASE_PATH: /data/furniture_ai.sqlite3
     volumes:
       - furniture-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
 
 volumes:
   furniture-data:

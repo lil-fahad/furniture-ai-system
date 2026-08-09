@@ -1,4 +1,4 @@
-.PHONY: install test lint run ui check audit models-check models-verify
+.PHONY: install test lint run ui docker check audit models-check models-verify
 install:
 	python -m pip install -e ".[dev,ui]"
 
@@ -13,6 +13,9 @@ run:
 
 ui:
 	streamlit run apps/streamlit_app.py
+
+docker:
+	docker compose up --build
 
 models-check:
 	python scripts/install_professional_bundle.py --check-spec

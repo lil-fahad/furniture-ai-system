@@ -78,9 +78,14 @@ class FloorPlanAnalyzer:
         free_space = cv2.bitwise_not(walls)
 
         flood = free_space.copy()
-        mask = np.zeros((free_space.shape[0] + 2, free_space.shape[1] + 2), np.uint8)
-        cv2.floodFill(flood, mask, (0, 0), 128)
-        interior = np.where(flood == 255, 255, 0).astype(np.uint8)
+        seed = _find_exterior_seed(free_space)
+        if seed is not None:
+            mask = np.zeros((free_space.shape[0] + 2, free_space.shape[1] + 2), np.uint8)
+            cv2.floodFill(flood, mask, seed, 128)
+            interior = np.where(flood == 255, 255, 0).astype(np.uint8)
+        else:
+            # No reachable exterior free space: nothing can be a verified room interior.
+            interior = np.zeros_like(free_space)
         interior = cv2.morphologyEx(interior, cv2.MORPH_OPEN, kernel, iterations=1)
 
         count, labels, stats, _ = cv2.connectedComponentsWithStats(interior, connectivity=8)
@@ -90,6 +95,19 @@ class FloorPlanAnalyzer:
         for label in range(1, count):
             area = int(stats[label, cv2.CC_STAT_AREA])
             if area < minimum_area or area > image_area * 0.92:
+                continue
+            left = int(stats[label, cv2.CC_STAT_LEFT])
+            top = int(stats[label, cv2.CC_STAT_TOP])
+            right = left + int(stats[label, cv2.CC_STAT_WIDTH])
+            bottom = top + int(stats[label, cv2.CC_STAT_HEIGHT])
+            if (
+                left <= 0
+                or top <= 0
+                or right >= interior.shape[1]
+                or bottom >= interior.shape[0]
+            ):
+                # Components touching the image border are exterior background,
+                # not enclosed rooms.
                 continue
             component = np.where(labels == label, 255, 0).astype(np.uint8)
             contours, _ = cv2.findContours(component, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -109,6 +127,36 @@ class FloorPlanAnalyzer:
         return polygons[: self.maximum_rooms]
 
 
+def _find_exterior_seed(free_space: np.ndarray) -> tuple[int, int] | None:
+    """Return an (x, y) seed pixel guaranteed to be in free space.
+
+    The exterior background is reachable from the image border, so border free
+    pixels are scanned first (deterministic order). If the whole border is wall
+    (e.g. a plan cropped exactly at its outer walls), any free pixel is used as
+    a last resort. Returns None when the image contains no free space at all.
+    """
+    height, width = free_space.shape
+    # Vectorized border scan (same deterministic order as before: top row
+    # left→right, bottom row right→left, then left/right columns top→bottom).
+    top = np.flatnonzero(free_space[0, :] == 255)
+    if top.size:
+        return (int(top[0]), 0)
+    bottom = np.flatnonzero(free_space[height - 1, :] == 255)
+    if bottom.size:
+        return (int(bottom[-1]), height - 1)
+    left = np.flatnonzero(free_space[1 : height - 1, 0] == 255)
+    if left.size:
+        return (0, int(left[0]) + 1)
+    right = np.flatnonzero(free_space[1 : height - 1, width - 1] == 255)
+    if right.size:
+        return (width - 1, int(right[0]) + 1)
+    free = np.argwhere(free_space == 255)
+    if free.size:
+        y, x = free[0]
+        return (int(x), int(y))
+    return None
+
+
 def infer_room_types(polygons: Iterable[Polygon]) -> list[str]:
     polygons_list = list(polygons)
     if not polygons_list:
@@ -125,5 +173,8 @@ def infer_room_types(polygons: Iterable[Polygon]) -> list[str]:
         "office",
     ]
     for rank, original_index in enumerate(ranked):
-        result[original_index] = templates[min(rank, len(templates) - 1)]
+        if rank < len(templates):
+            result[original_index] = templates[rank]
+        # Beyond the template list keep the generic "room" label instead of
+        # mislabeling every remaining room as "office".
     return result

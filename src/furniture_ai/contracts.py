@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import math
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from shapely.geometry import Polygon
 
 NonNegativeFloat = Annotated[float, Field(ge=0)]
 Confidence = Annotated[float, Field(ge=0, le=1)]
+
+MIN_POLYGON_AREA = 1e-6
 
 
 class Unit(StrEnum):
@@ -56,6 +60,20 @@ class Room(BaseModel):
     area: NonNegativeFloat
     confidence: Confidence | None = None
     furniture: list[FurniturePlacement] = Field(default_factory=list)
+
+    @field_validator("polygon")
+    @classmethod
+    def validate_polygon_geometry(cls, points: list[Point]) -> list[Point]:
+        if not all(math.isfinite(point.x) and math.isfinite(point.y) for point in points):
+            raise ValueError("Room polygon coordinates must be finite")
+        polygon = Polygon([(point.x, point.y) for point in points])
+        if polygon.buffer(0).is_empty:
+            raise ValueError("Room polygon is degenerate (collinear or near-zero area)")
+        if not polygon.is_valid:
+            raise ValueError("Room polygon must be a simple (non-self-intersecting) polygon")
+        if polygon.area < MIN_POLYGON_AREA:
+            raise ValueError("Room polygon is degenerate (collinear or near-zero area)")
+        return points
 
 
 class FloorPlanAnalysis(BaseModel):
@@ -115,24 +133,3 @@ class Booking(BookingCreate):
     id: int
     status: str
     created_at: str
-
-
-class SupplierRecommendation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    supplier_name: str
-    category: str
-    country_city: str
-    official_website: str
-    profile_link: str
-    saudi_shipping: str
-    dropshipping: str
-    models_3d: str
-    lead_time: str
-    moq: str
-    price_range: str
-    model_score: float
-    preference_adjustment: float
-    final_score: float
-    reference_score: float
-    key_strengths: str
-    main_risks: str

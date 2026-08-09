@@ -1,32 +1,103 @@
 from __future__ import annotations
 
 import argparse
+import os
+import random
 from pathlib import Path
 
+import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_image
+from torchvision.transforms import InterpolationMode
 from torchvision.transforms.functional import resize
 from tqdm import tqdm
 
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+
+
+def seed_everything(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
 
 class FloorPlanDataset(Dataset):
-    def __init__(self, root: Path, size: int = 512) -> None:
-        self.images = sorted((root / "images").glob("*"))
+    def __init__(
+        self,
+        root: Path,
+        size: int = 512,
+        classes: int = 5,
+        mask_remap: str = "none",
+        limit: int | None = None,
+    ) -> None:
+        self.images = sorted(
+            path
+            for path in (root / "images").glob("*")
+            if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
+        )
         self.masks = root / "masks"
         self.size = size
+        self.classes = classes
         if not self.images:
-            raise ValueError("No training images found")
+            raise ValueError(f"No training images found under {root / 'images'}")
+        if limit is not None:
+            self.images = self.images[:limit]
+        for image_path in self.images:
+            mask_path = self.masks / f"{image_path.stem}.png"
+            if not mask_path.is_file():
+                raise ValueError(f"Missing mask for image {image_path}: expected {mask_path}")
+        self.remap_table: torch.Tensor | None = None
+        if mask_remap == "auto":
+            self.remap_table = self._build_remap_table()
+        elif mask_remap != "none":
+            raise ValueError(f"Unknown --mask-remap mode: {mask_remap!r} (use 'none' or 'auto')")
+
+    def _mask_path(self, image_path: Path) -> Path:
+        return self.masks / f"{image_path.stem}.png"
+
+    def _build_remap_table(self) -> torch.Tensor:
+        unique_values: set[int] = set()
+        for image_path in self.images:
+            mask = read_image(str(self._mask_path(image_path)))[:1].long()
+            unique_values.update(mask.unique().tolist())
+        sorted_values = sorted(unique_values)
+        if len(sorted_values) > self.classes:
+            raise ValueError(
+                f"Masks contain {len(sorted_values)} distinct values but --classes={self.classes}; "
+                "raise --classes or fix the masks"
+            )
+        table = torch.zeros(max(sorted_values) + 1, dtype=torch.long)
+        for new_id, old_value in enumerate(sorted_values):
+            table[old_value] = new_id
+        print(f"mask remap (auto): {sorted_values} -> {list(range(len(sorted_values)))}")
+        return table
 
     def __len__(self) -> int:
         return len(self.images)
 
     def __getitem__(self, index: int):
         image_path = self.images[index]
-        mask_path = self.masks / f"{image_path.stem}.png"
+        mask_path = self._mask_path(image_path)
         image = resize(read_image(str(image_path)).float() / 255, [self.size, self.size])
-        mask = resize(read_image(str(mask_path))[:1], [self.size, self.size]).squeeze(0).long()
+        mask = read_image(str(mask_path))[:1].long()
+        if self.remap_table is not None:
+            if int(mask.max()) >= len(self.remap_table):
+                raise ValueError(
+                    f"Mask {mask_path} contains value {int(mask.max())} which was not seen "
+                    "when the remap table was built"
+                )
+            mask = self.remap_table[mask]
+        mask = resize(mask, [self.size, self.size], interpolation=InterpolationMode.NEAREST)
+        mask = mask.squeeze(0)
+        mask_min, mask_max = int(mask.min()), int(mask.max())
+        if mask_min < 0 or mask_max >= self.classes:
+            raise ValueError(
+                f"Mask {mask_path} contains class ids in [{mask_min}, {mask_max}] but the model "
+                f"expects [0, {self.classes - 1}] (--classes={self.classes}). Pass "
+                "--mask-remap auto to remap mask values to contiguous class ids."
+            )
         return image, mask
 
 
@@ -70,12 +141,36 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("models/floorplan_segmenter/unet.pt"))
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--classes", type=int, default=5, help="Number of segmentation classes")
+    parser.add_argument("--size", type=int, default=512, help="Square resize for images and masks")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--limit", type=int, default=None, help="Cap the number of training pairs")
+    parser.add_argument("--num-workers", type=int, default=2)
+    parser.add_argument(
+        "--mask-remap",
+        choices=["none", "auto"],
+        default="none",
+        help=(
+            "'auto' remaps the distinct mask values to contiguous class ids 0..N-1 "
+            "(e.g. 0/255 masks become 0/1). 'none' requires masks to already use "
+            "class ids 0..classes-1."
+        ),
+    )
     args = parser.parse_args()
+    seed_everything(args.seed)
 
-    dataset = FloorPlanDataset(args.data)
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    dataset = FloorPlanDataset(
+        args.data,
+        size=args.size,
+        classes=args.classes,
+        mask_remap=args.mask_remap,
+        limit=args.limit,
+    )
+    loader = DataLoader(
+        dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers
+    )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = SmallUNet().to(device)
+    model = SmallUNet(classes=args.classes).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
     criterion = nn.CrossEntropyLoss()
 
@@ -93,7 +188,9 @@ def main() -> None:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     scripted = torch.jit.script(model.cpu().eval())
-    scripted.save(str(args.output))
+    temporary = args.output.with_suffix(args.output.suffix + ".tmp")
+    scripted.save(str(temporary))
+    os.replace(temporary, args.output)
 
 
 if __name__ == "__main__":

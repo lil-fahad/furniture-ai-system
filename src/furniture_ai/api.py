@@ -5,17 +5,11 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
 from furniture_ai import __version__
 from furniture_ai.config import Settings, get_settings
-from furniture_ai.contracts import (
-    Booking,
-    BookingCreate,
-    DesignResult,
-    LayoutRequest,
-    Product,
-    SupplierRecommendation,
-)
+from furniture_ai.contracts import Booking, BookingCreate, DesignResult, LayoutRequest, Product
 from furniture_ai.image_io import ImageValidationError, load_validated_image
 from furniture_ai.layout import furnish_floor_plan, load_catalog
 from furniture_ai.models import ModelRegistry
@@ -23,7 +17,6 @@ from furniture_ai.pipeline import DesignPipeline
 from furniture_ai.security import require_service_key
 from furniture_ai.storage import BookingStore
 
-settings = get_settings()
 app = FastAPI(
     title="Furniture AI System",
     version=__version__,
@@ -34,7 +27,7 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
+    allow_origins=get_settings().allowed_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-API-Key"],
@@ -44,20 +37,6 @@ app.add_middleware(
 @lru_cache(maxsize=1)
 def get_booking_store() -> BookingStore:
     return BookingStore(get_settings().database_path)
-
-
-@lru_cache(maxsize=1)
-def get_supplier_rows() -> list[dict[str, str]]:
-    from furniture_ai.supplier_ranker import load_supplier_rows
-
-    return load_supplier_rows(get_settings().supplier_data_path)
-
-
-@lru_cache(maxsize=1)
-def get_supplier_model():
-    from furniture_ai.supplier_ranker import load_supplier_model
-
-    return load_supplier_model(get_settings().supplier_model_path)
 
 
 @app.get("/health", tags=["system"])
@@ -82,13 +61,10 @@ def ready() -> dict[str, object]:
             status_code=503,
             detail="Application dependencies are not ready",
         ) from exc
-    active = get_settings()
     return {
         "status": "ready",
         "models_present": sum(status.present for status in model_statuses),
         "models_registered": len(model_statuses),
-        "supplier_data_present": active.supplier_data_path.is_file(),
-        "supplier_ranker_present": active.supplier_model_path.is_file(),
     }
 
 
@@ -100,17 +76,28 @@ def ready() -> dict[str, object]:
 )
 async def analyze_and_design(
     image: Annotated[UploadFile, File(...)],
+    active_settings: Annotated[Settings, Depends(get_settings)],
     pixels_per_cm: Annotated[float | None, Form(gt=0)] = None,
     use_openai: Annotated[bool, Form()] = False,
     preferences: Annotated[str, Form(max_length=3000)] = "",
-    active_settings: Annotated[Settings, Depends(get_settings)] = settings,
 ) -> DesignResult:
     data = await image.read(active_settings.max_upload_bytes + 1)
+    if len(data) > active_settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail="The uploaded image exceeds the configured byte limit",
+        )
+    # Image decode/validation and the OpenCV pipeline are blocking CPU work;
+    # run them in the threadpool so the event loop stays responsive.
     try:
-        loaded = load_validated_image(data, image.content_type, active_settings)
+        loaded = await run_in_threadpool(
+            load_validated_image, data, image.content_type, active_settings
+        )
     except ImageValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return DesignPipeline(active_settings).run(
+    pipeline = DesignPipeline(active_settings)
+    return await run_in_threadpool(
+        pipeline.run,
         loaded,
         pixels_per_cm=pixels_per_cm,
         use_openai=use_openai,
@@ -125,10 +112,21 @@ async def analyze_and_design(
     tags=["design"],
 )
 def layout(request: LayoutRequest) -> DesignResult:
-    return furnish_floor_plan(request.floor_plan, room_type_overrides=request.room_types)
+    try:
+        return furnish_floor_plan(request.floor_plan, room_type_overrides=request.room_types)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid floor-plan geometry: {exc}",
+        ) from exc
 
 
-@app.get("/api/v1/catalog", response_model=list[Product], tags=["catalog"])
+@app.get(
+    "/api/v1/catalog",
+    response_model=list[Product],
+    dependencies=[Depends(require_service_key)],
+    tags=["catalog"],
+)
 def catalog(room_type: str | None = Query(default=None)) -> list[Product]:
     products = load_catalog()
     if room_type:
@@ -136,48 +134,10 @@ def catalog(room_type: str | None = Query(default=None)) -> list[Product]:
     return products
 
 
-@app.get("/api/v1/models", tags=["models"])
+@app.get("/api/v1/models", dependencies=[Depends(require_service_key)], tags=["models"])
 def models(active_settings: Annotated[Settings, Depends(get_settings)]) -> list[dict[str, object]]:
     registry = ModelRegistry(active_settings.model_manifest_path)
     return [status.__dict__ for status in registry.statuses()]
-
-
-@app.get(
-    "/api/v1/suppliers/recommend",
-    response_model=list[SupplierRecommendation],
-    tags=["suppliers"],
-)
-def recommend_suppliers(
-    category: str | None = Query(default=None, max_length=100),
-    requires_dropshipping: bool = Query(default=False),
-    requires_3d_models: bool = Query(default=False),
-    requires_direct_fulfillment: bool = Query(default=False),
-    max_lead_days: float | None = Query(default=None, gt=0),
-    max_moq: float | None = Query(default=None, gt=0),
-    max_price: float | None = Query(default=None, gt=0),
-    top_k: int = Query(default=10, ge=1, le=41),
-) -> list[SupplierRecommendation]:
-    try:
-        from furniture_ai.supplier_ranker import SupplierPreference, rank_suppliers
-
-        preference = SupplierPreference(
-            category=category,
-            requires_dropshipping=requires_dropshipping,
-            requires_3d_models=requires_3d_models,
-            requires_direct_fulfillment=requires_direct_fulfillment,
-            max_lead_days=max_lead_days,
-            max_moq=max_moq,
-            max_price=max_price,
-        )
-        results = rank_suppliers(
-            get_supplier_rows(),
-            get_supplier_model(),
-            preference=preference,
-            top_k=top_k,
-        )
-    except (FileNotFoundError, ImportError, OSError, ValueError) as exc:
-        raise HTTPException(status_code=503, detail="Supplier ranker is unavailable") from exc
-    return [SupplierRecommendation.model_validate(item) for item in results]
 
 
 @app.post(

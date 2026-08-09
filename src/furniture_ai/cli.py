@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from furniture_ai.config import get_settings
-from furniture_ai.image_io import load_validated_image
+from furniture_ai.image_io import ImageValidationError, load_validated_image
 from furniture_ai.pipeline import DesignPipeline
 
 
@@ -18,7 +18,26 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = get_settings()
-    image = load_validated_image(args.image.read_bytes(), None, settings)
+    try:
+        file_size = args.image.stat().st_size
+    except OSError as exc:
+        parser.error(f"cannot read image {args.image}: {exc.strerror or exc}")
+        return  # unreachable; parser.error exits
+    if file_size > settings.max_upload_bytes:
+        parser.error(
+            f"image {args.image} is {file_size} bytes, exceeding the configured "
+            f"limit of {settings.max_upload_bytes} bytes"
+        )
+    try:
+        data = args.image.read_bytes()
+    except OSError as exc:
+        parser.error(f"cannot read image {args.image}: {exc.strerror or exc}")
+        return  # unreachable; parser.error exits
+    try:
+        image = load_validated_image(data, None, settings)
+    except ImageValidationError as exc:
+        parser.error(str(exc))
+        return  # unreachable; parser.error exits
     result = DesignPipeline(settings).run(
         image,
         pixels_per_cm=args.pixels_per_cm,
