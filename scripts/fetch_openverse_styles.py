@@ -139,7 +139,9 @@ def request_bytes(url: str, timeout: float, limit: int | None = None) -> bytes:
     return payload
 
 
-def openverse_results(query: str, licenses: Iterable[str], page_size: int, timeout: float) -> list[dict[str, Any]]:
+def openverse_results(
+    query: str, licenses: Iterable[str], page_size: int, timeout: float
+) -> list[dict[str, Any]]:
     parameters = {
         "q": query,
         "license": ",".join(licenses),
@@ -173,7 +175,12 @@ def normalized_jpeg(payload: bytes) -> bytes:
             output = BytesIO()
             image.save(output, format="JPEG", quality=90, optimize=True)
             return output.getvalue()
-    except (Image.DecompressionBombError, Image.DecompressionBombWarning, UnidentifiedImageError, OSError) as exc:
+    except (
+        Image.DecompressionBombError,
+        Image.DecompressionBombWarning,
+        UnidentifiedImageError,
+        OSError,
+    ) as exc:
         raise ValueError(f"invalid image: {exc}") from exc
 
 
@@ -196,7 +203,11 @@ def existing_openverse_ids(manifest: Path) -> set[str]:
 
 def count_images(directory: Path) -> int:
     extensions = {".jpg", ".jpeg", ".png", ".webp"}
-    return sum(1 for path in directory.iterdir() if path.is_file() and path.suffix.lower() in extensions)
+    return sum(
+        1
+        for path in directory.iterdir()
+        if path.is_file() and path.suffix.lower() in extensions
+    )
 
 
 def output_path(path: Path) -> str:
@@ -284,7 +295,8 @@ def run(args: argparse.Namespace) -> int:
                 continue
             if args.dry_run:
                 print(
-                    f"  candidate {identifier}: license={result.get('license')} title={result.get('title')!r}",
+                    f"  candidate {identifier}: license={result.get('license')} "
+                    f"title={result.get('title')!r}",
                     flush=True,
                 )
                 accepted += 1
@@ -310,7 +322,8 @@ def run(args: argparse.Namespace) -> int:
 
         if accepted < needed:
             print(
-                f"  found {accepted}/{needed} new images. Review results and rerun later if needed.",
+                f"  found {accepted}/{needed} new images. "
+                "Review results and rerun later if needed.",
                 file=sys.stderr,
                 flush=True,
             )
