@@ -34,9 +34,16 @@ CLASS_INDEX_URLS = (
     f"{OPENIMAGES_BASE}/v5/class-descriptions.csv",
 )
 
-TRAIN_LABELS_URL = (
-    f"{OPENIMAGES_BASE}/v6/oidv6-train-images-with-labels-with-rotation.csv"
+# Image-level annotations (which class MIDs each train image carries).
+# Header: ImageID,Source,LabelName,Confidence  (Confidence=1 means positive).
+TRAIN_ANNOTATIONS_URL = (
+    f"{OPENIMAGES_BASE}/v6/oidv6-train-annotations-human-imagelabels.csv"
 )
+
+# Image metadata incl. download URLs. Header: ImageID,Subset,OriginalURL,...,
+# Thumbnail300KURL,Rotation  — note: this CSV has NO label columns, so class
+# selection must come from TRAIN_ANNOTATIONS_URL and URLs are resolved here.
+TRAIN_IMAGES_URL = f"{OPENIMAGES_BASE}/v6/oidv6-train-images-with-labels-with-rotation.csv"
 
 #: Furniture class display name -> Open Images machine id (MID).
 FURNITURE_CLASSES: dict[str, str] = {
@@ -56,6 +63,11 @@ SELECTION_FILENAME = "selection.csv"
 DEFAULT_TIMEOUT_SECONDS = 60
 DEFAULT_ATTEMPTS = 3
 _BACKOFF_BASE_SECONDS = 2.0
+
+#: How many extra candidate ids to collect per class in phase A, so that
+#: candidates lacking a downloadable URL in phase B can be skipped while still
+#: reaching ``max_per_class`` usable images.
+_CANDIDATE_OVERSHOOT = 3
 _USER_AGENT = "furniture-ai-data-ingest/1.3 (+https://github.com/lil-fahad/furniture-ai-system)"
 
 
@@ -114,12 +126,17 @@ def fetch_class_index(dest_dir: Path) -> Path:
 def select_image_ids(
     class_names: list[str], max_per_class: int, dest_dir: Path
 ) -> dict[str, list[str]]:
-    """Stream the Open Images v6 train CSV and pick image ids per class.
+    """Pick image ids + URLs per class from Open Images (two streaming passes).
 
-    The CSV is parsed as a stream (it is far too large to load in memory).
-    Rows lacking an ``OriginalURL`` (and a ``Thumbnail300KURL`` fallback) are
-    skipped. Selection stops as soon as every requested class reached
-    ``max_per_class`` usable rows.
+    Open Images stores labels and download URLs in separate CSVs, so selection
+    runs in two phases, both streamed (each file is ~2.5 GB):
+
+    * Phase A — stream ``TRAIN_ANNOTATIONS_URL`` and collect up to
+      ``max_per_class * _CANDIDATE_OVERSHOOT`` positive (Confidence=1) image
+      ids per requested class.
+    * Phase B — stream ``TRAIN_IMAGES_URL`` to resolve ``OriginalURL`` (with a
+      ``Thumbnail300KURL`` fallback) for those candidate ids, then keep the
+      first ``max_per_class`` ids per class that have a usable URL.
 
     Writes a sidecar ``dest_dir/selection.csv`` (class_name,image_id,url) that
     :func:`download_subset` uses to resolve URLs without another network pass.
@@ -135,13 +152,16 @@ def select_image_ids(
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     wanted = {FURNITURE_CLASSES[name]: name for name in class_names}
-    selected: dict[str, list[str]] = {name: [] for name in class_names}
-    urls: dict[str, str] = {}
+    candidates: dict[str, list[str]] = {name: [] for name in class_names}
+    seen: dict[str, set[str]] = {name: set() for name in class_names}
+    candidate_cap = max_per_class * _CANDIDATE_OVERSHOOT
 
-    def full() -> bool:
-        return all(len(ids) >= max_per_class for ids in selected.values())
+    def capped() -> bool:
+        return all(len(ids) >= candidate_cap for ids in candidates.values())
 
-    with _open_url(TRAIN_LABELS_URL, timeout=120) as response:
+    # --- Phase A: collect candidate image ids from the annotations CSV. -----
+    print("phase A: scanning label annotations for furniture classes...", flush=True)
+    with _open_url(TRAIN_ANNOTATIONS_URL, timeout=120) as response:
         text_stream = io.TextIOWrapper(response, encoding="utf-8", errors="replace", newline="")
         reader = csv.reader(text_stream)
         header = [column.strip().lower() for column in next(reader)]
@@ -149,34 +169,81 @@ def select_image_ids(
             id_col = header.index("imageid")
             label_col = header.index("labelname")
         except ValueError as exc:
-            raise RuntimeError(f"Unexpected CSV header from {TRAIN_LABELS_URL}: {header}") from exc
+            raise RuntimeError(
+                f"Unexpected CSV header from {TRAIN_ANNOTATIONS_URL}: {header}"
+            ) from exc
+        conf_col = header.index("confidence") if "confidence" in header else None
+
+        for row in reader:
+            if capped():
+                break
+            if len(row) <= max(id_col, label_col, conf_col or 0):
+                continue
+            if conf_col is not None and row[conf_col].strip() != "1":
+                continue  # positive labels only
+            class_name = wanted.get(row[label_col].strip())
+            if class_name is None or len(candidates[class_name]) >= candidate_cap:
+                continue
+            image_id = row[id_col].strip()
+            if not image_id or image_id in seen[class_name]:
+                continue
+            seen[class_name].add(image_id)
+            candidates[class_name].append(image_id)
+
+    candidate_ids = {image_id for ids in candidates.values() for image_id in ids}
+    print(
+        f"phase A done: {len(candidate_ids)} candidate ids across "
+        f"{len(class_names)} classes; resolving URLs...",
+        flush=True,
+    )
+
+    # --- Phase B: resolve download URLs from the image metadata CSV. --------
+    urls: dict[str, str] = {}
+    with _open_url(TRAIN_IMAGES_URL, timeout=120) as response:
+        text_stream = io.TextIOWrapper(response, encoding="utf-8", errors="replace", newline="")
+        reader = csv.reader(text_stream)
+        header = [column.strip().lower() for column in next(reader)]
+        try:
+            id_col = header.index("imageid")
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Unexpected CSV header from {TRAIN_IMAGES_URL}: {header}"
+            ) from exc
         url_col = header.index("originalurl") if "originalurl" in header else None
         thumb_col = header.index("thumbnail300kurl") if "thumbnail300kurl" in header else None
         if url_col is None and thumb_col is None:
             raise RuntimeError(
-                f"CSV at {TRAIN_LABELS_URL} has neither OriginalURL nor Thumbnail300KURL"
+                f"CSV at {TRAIN_IMAGES_URL} has neither OriginalURL nor Thumbnail300KURL"
             )
 
         for row in reader:
-            if full():
-                break
-            if len(row) <= max(id_col, label_col, url_col or 0, thumb_col or 0):
+            if len(urls) >= len(candidate_ids):
+                break  # every candidate resolved (or not present in this CSV)
+            if len(row) <= max(id_col, url_col or 0, thumb_col or 0):
                 continue
-            class_name = wanted.get(row[label_col].strip())
-            if class_name is None or len(selected[class_name]) >= max_per_class:
+            image_id = row[id_col].strip()
+            if image_id not in candidate_ids or image_id in urls:
                 continue
             url = ""
             if url_col is not None:
                 url = row[url_col].strip()
             if not url and thumb_col is not None:
                 url = row[thumb_col].strip()  # documented fallback thumbnail
-            if not url:
-                continue  # skip rows without any usable URL
-            image_id = row[id_col].strip()
-            if not image_id:
-                continue
-            selected[class_name].append(image_id)
-            urls[image_id] = url
+            if url:
+                urls[image_id] = url
+
+    # Keep the first max_per_class candidates per class that resolved a URL.
+    selected: dict[str, list[str]] = {}
+    for class_name in class_names:
+        usable = [iid for iid in candidates[class_name] if iid in urls][:max_per_class]
+        selected[class_name] = usable
+        if len(usable) < max_per_class:
+            print(
+                f"warning: {class_name}: only {len(usable)}/{max_per_class} "
+                "candidates had a downloadable URL",
+                file=sys.stderr,
+                flush=True,
+            )
 
     sidecar = dest_dir / SELECTION_FILENAME
     with sidecar.open("w", encoding="utf-8", newline="") as handle:
