@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -85,6 +86,28 @@ class ModelRegistry:
         return statuses
 
 
+def _infer_num_classes(state_dict: dict) -> int | None:
+    """Infer the classifier head width from state_dict tensor shapes.
+
+    Looks for 2-D weight tensors on classifier/fc/head keys and returns the
+    output dimension of the deepest one. Returns None when no candidate is
+    found, letting the caller decide on a fallback.
+    """
+    candidates: list[tuple[int, str]] = []
+    for key, tensor in state_dict.items():
+        if not key.endswith("weight"):
+            continue
+        if not any(token in key for token in ("classifier", "fc", "head")):
+            continue
+        shape = getattr(tensor, "shape", None)
+        if shape is not None and len(shape) == 2:
+            candidates.append((key.count("."), key))
+    if not candidates:
+        return None
+    _, key = max(candidates)
+    return int(state_dict[key].shape[0])
+
+
 def safe_load_room_classifier(path: Path, num_classes: int | None = None):
     try:
         import torch
@@ -103,9 +126,17 @@ def safe_load_room_classifier(path: Path, num_classes: int | None = None):
         raise TypeError("Checkpoint does not contain a valid state dictionary")
 
     classes = checkpoint.get("classes")
-    resolved_classes = num_classes or (len(classes) if isinstance(classes, list) else 8)
+    resolved_classes = (
+        num_classes
+        or (len(classes) if isinstance(classes, list) else 0)
+        or _infer_num_classes(state_dict)
+        or 8
+    )
     architecture = str(checkpoint.get("architecture", "tf_efficientnet_b0"))
-    if architecture == "efficientnet_b0" and any(key.startswith("features.") for key in state_dict):
+    # Detect the checkpoint layout from its keys first: torchvision
+    # EfficientNet uses ``features.``/``classifier.N`` naming, timm does not.
+    torchvision_layout = any(key.startswith("features.") for key in state_dict)
+    if torchvision_layout:
         try:
             from torchvision.models import efficientnet_b0
         except ImportError as exc:
@@ -123,3 +154,34 @@ def safe_load_room_classifier(path: Path, num_classes: int | None = None):
     model.eval()
     model.class_labels = tuple(classes) if isinstance(classes, list) else tuple()
     return model
+
+
+_MODEL_CACHE: dict[tuple[str, int | None, int, int], object] = {}
+_MODEL_CACHE_LOCK = threading.Lock()
+
+
+def load_room_classifier_cached(path: Path, num_classes: int | None = None):
+    """Thread-safe lazy singleton wrapper around :func:`safe_load_room_classifier`.
+
+    Repeated API calls must not re-read and re-build model weights. The cache
+    key includes the resolved path, the requested class count, and the file's
+    size/mtime so a replaced checkpoint is reloaded instead of served stale.
+    """
+    resolved = str(Path(path).resolve())
+    stat = Path(path).stat()  # raises FileNotFoundError for missing files, as before
+    key = (resolved, num_classes, stat.st_size, stat.st_mtime_ns)
+    with _MODEL_CACHE_LOCK:
+        cached = _MODEL_CACHE.get(key)
+        if cached is not None:
+            return cached
+    # Load outside the lock so concurrent first-time callers do not serialize
+    # on the (slow) weight load; setdefault keeps exactly one winner.
+    model = safe_load_room_classifier(path, num_classes=num_classes)
+    with _MODEL_CACHE_LOCK:
+        return _MODEL_CACHE.setdefault(key, model)
+
+
+def clear_model_cache() -> None:
+    """Drop all cached model instances (primarily for tests)."""
+    with _MODEL_CACHE_LOCK:
+        _MODEL_CACHE.clear()

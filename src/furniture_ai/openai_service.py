@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import re
 from io import BytesIO
 from typing import Any
@@ -83,13 +84,22 @@ class OpenAIDesignService:
             ],
         )
         payload = _json_object(response.output_text)
+        rooms = payload.get("rooms", [])
+        if not isinstance(rooms, list):
+            raise ValueError("The model response 'rooms' field must be a list")
         result: dict[str, tuple[str, float]] = {}
-        for item in payload.get("rooms", []):
+        for item in rooms:
             if not isinstance(item, dict):
                 continue
             room_id = str(item.get("id", ""))
             room_type = str(item.get("room_type", "room")).strip().lower().replace(" ", "_")
-            confidence = min(max(float(item.get("confidence", 0.5)), 0.0), 1.0)
+            try:
+                confidence = float(item.get("confidence", 0.5))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(confidence):
+                continue
+            confidence = min(max(confidence, 0.0), 1.0)
             if room_id:
                 result[room_id] = (room_type, confidence)
         return result

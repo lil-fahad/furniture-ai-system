@@ -144,8 +144,15 @@ def verify_bundle_archive(
         if missing:
             raise ValueError(f"Bundle is missing {len(missing)} required files")
         for item in spec.files:
-            if infos[item.archive_path].file_size != item.size_bytes:
+            info = infos[item.archive_path]
+            if info.file_size != item.size_bytes:
                 raise ValueError(f"Member size mismatch: {item.archive_path}")
+            digest = hashlib.sha256()
+            with archive.open(info) as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            if digest.hexdigest() != item.sha256:
+                raise ValueError(f"Member SHA-256 mismatch: {item.archive_path}")
     return {
         "bundle_id": spec.id,
         "archive_sha256": actual_hash,
@@ -179,9 +186,15 @@ def install_bundle(
                 written = 0
                 with archive.open(infos[item.archive_path]) as source, target.open("wb") as output:
                     for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        written += len(chunk)
+                        if written > item.size_bytes:
+                            # Abort before writing past the declared size so a
+                            # zip-bomb member cannot stream unbounded data.
+                            raise ValueError(
+                                f"Member exceeds declared size: {item.archive_path}"
+                            )
                         output.write(chunk)
                         digest.update(chunk)
-                        written += len(chunk)
                 if written != item.size_bytes:
                     raise ValueError(f"Extracted size mismatch: {item.archive_path}")
                 if digest.hexdigest() != item.sha256:
@@ -197,9 +210,20 @@ def install_bundle(
         (staging / "installed.json").write_text(
             json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
         )
+        # Atomic swap with rollback: move any existing installation aside,
+        # move the staged tree into place, and only then drop the backup. A
+        # crash before the swap leaves the previous installation untouched.
+        backup = Path(temp_dir) / "previous"
         if destination.exists():
-            shutil.rmtree(destination)
-        os.replace(staging, destination)
+            os.replace(destination, backup)
+        try:
+            os.replace(staging, destination)
+        except OSError:
+            if backup.exists():
+                os.replace(backup, destination)
+            raise
+        if backup.exists():
+            shutil.rmtree(backup)
 
     return BundleInstallReport(
         bundle_id=spec.id,

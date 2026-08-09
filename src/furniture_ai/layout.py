@@ -20,15 +20,39 @@ WALL_CATEGORIES = {"sofa", "bed", "wardrobe", "tv_unit", "desk", "cabinet"}
 
 
 @lru_cache(maxsize=1)
-def load_catalog(path: str = "data/furniture_catalog.json") -> list[Product]:
+def load_catalog(path: str | Path | None = None) -> list[Product]:
+    """Load the furniture catalog.
+
+    Defaults to ``Settings.catalog_path`` (env-driven via ``CATALOG_PATH``,
+    anchored at the project root), so the API and CLI work from any working
+    directory. An explicit ``path`` overrides the setting (used by tests).
+    """
+    if path is None:
+        from furniture_ai.config import get_settings
+
+        path = get_settings().catalog_path
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     return [Product.model_validate(item) for item in payload]
 
 
 def room_polygon(points: list[Point]) -> Polygon:
+    """Build a valid Shapely polygon from room boundary points.
+
+    Raises:
+        ValueError: if the points do not describe a usable room — fewer than
+            three points, a self-intersecting ring that collapses under
+            ``buffer(0)``, or a degenerate (zero-area/collinear) shape. The
+            API layer maps this to HTTP 422.
+    """
+    if len(points) < 3:
+        raise ValueError("Room polygon requires at least three points")
     polygon = Polygon([(point.x, point.y) for point in points]).buffer(0)
     if polygon.is_empty or not isinstance(polygon, Polygon):
-        raise ValueError("Room polygon is invalid")
+        raise ValueError(
+            "Room polygon is invalid: self-intersecting or collapsed geometry"
+        )
+    if polygon.area <= 0:
+        raise ValueError("Room polygon is degenerate: zero-area (collinear points)")
     return polygon
 
 
@@ -94,29 +118,39 @@ def furnish_floor_plan(
     room_type_overrides: dict[str, str] | None = None,
     catalog: list[Product] | None = None,
 ) -> DesignResult:
+    """Furnish a floor plan without mutating the caller's object.
+
+    The input is deep-copied so repeated calls with different overrides do not
+    accumulate state. Plans with no rooms return an empty result. Rooms whose
+    polygons are degenerate raise the documented ``ValueError`` from
+    ``room_polygon`` (mapped to HTTP 422 by the API layer).
+    """
     active_catalog = catalog or load_catalog()
     override = room_type_overrides or {}
+    plan = floor_plan.model_copy(deep=True)
     placed_total = 0
-    warnings = list(floor_plan.warnings)
+    warnings = list(plan.warnings)
+    gates = [
+        LineString([(opening.start.x, opening.start.y), (opening.end.x, opening.end.y)])
+        for opening in plan.openings
+    ]
 
-    for room in floor_plan.rooms:
+    for room in plan.rooms:
         room.room_type = override.get(room.id, room.room_type)
         polygon = room_polygon(room.polygon)
         min_x, min_y, max_x, max_y = polygon.bounds
         short_side = max(min(max_x - min_x, max_y - min_y), 1.0)
         clearance = short_side * 0.025
         wall_margin = short_side * 0.008
-        gates = [
-            LineString([(opening.start.x, opening.start.y), (opening.end.x, opening.end.y)])
-            for opening in floor_plan.openings
-        ]
         products = [product for product in active_catalog if room.room_type in product.room_types]
         products.sort(key=lambda product: (product.category, product.id))
         placed_shapes: list[Polygon] = []
         placements: list[FurniturePlacement] = []
 
         for product in products:
-            width, depth, source = _dimensions(polygon, product, floor_plan.pixels_per_cm)
+            width, depth, source = _dimensions(polygon, product, plan.pixels_per_cm)
+            if width <= 0 or depth <= 0:
+                continue
             accepted: tuple[float, float, float, Polygon] | None = None
             for cx, cy in _candidate_centers(polygon, product.category in WALL_CATEGORIES):
                 for angle in (0.0, 90.0):
@@ -146,6 +180,11 @@ def furnish_floor_plan(
         room.furniture = placements
         placed_total += len(placements)
         if not placements:
-            warnings.append(f"No catalog items fit inside {room.id}")
+            if not products:
+                warnings.append(
+                    f"No catalog products match room type {room.room_type!r} for {room.id}"
+                )
+            else:
+                warnings.append(f"No catalog items fit inside {room.id}")
 
-    return DesignResult(floor_plan=floor_plan, placed_items=placed_total, warnings=warnings)
+    return DesignResult(floor_plan=plan, placed_items=placed_total, warnings=warnings)
