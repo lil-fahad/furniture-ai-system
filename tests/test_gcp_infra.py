@@ -135,7 +135,9 @@ def test_config_yaml_defaults() -> None:
 def test_dockerfile_training_content() -> None:
     assert DOCKERFILE.is_file(), "missing cloud/Dockerfile.training"
     text = DOCKERFILE.read_text(encoding="utf-8")
-    assert "FROM us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4.py310:latest" in text
+    # Python 3.11+ CUDA base image (repo requires >= 3.11; uses 3.11-only stdlib).
+    assert "FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime" in text
+    assert "--ignore-requires-python" not in text
     # Repo installed with the [training] extra plus the cloud SDK clients.
     assert "[training]" in text
     assert "google-cloud-storage" in text
