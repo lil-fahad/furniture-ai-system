@@ -1,0 +1,36 @@
+# Training image for Vertex AI custom jobs (furniture-ai-system).
+#
+# Build (usually done by scripts/gcp_bootstrap.sh):
+#   gcloud builds submit \
+#     --tag $REGION-docker.pkg.dev/$PROJECT/furniture-ai/trainer:latest \
+#     -f cloud/Dockerfile.training .
+#
+# The container runs `python -m training.cloud_entry` and expects the
+# environment variables GCP_PROJECT, GCP_REGION, GCS_BUCKET and RUN_ID plus
+# a `--task {room,segmenter,ranker}` argument (see cloud/vertex_jobs.py).
+
+# Official PyTorch CUDA runtime (Python 3.11) — matches requires-python >= 3.11
+# (the repo uses 3.11-only stdlib, e.g. `from datetime import UTC`, inside the
+# container-running code) and works as a Vertex AI custom training container.
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
+
+WORKDIR /app
+
+# Copy everything the trainers need: packaging metadata, source package,
+# training scripts and the (tiny) seed data files used by the ranker.
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY training ./training
+COPY data ./data
+
+# Install the repo with the [training] extra plus the GCS/Vertex clients
+# used by training.cloud_entry and training.data_ingest.
+RUN pip install --no-cache-dir \
+    ".[training]" \
+    "google-cloud-storage>=2.10,<3" \
+    "google-cloud-aiplatform>=1.60,<2"
+
+# Datasets are downloaded to /tmp/fai_data at runtime (SPEC §2.4).
+ENV FAI_STAGING_ROOT=/tmp/fai_data
+
+ENTRYPOINT ["python", "-m", "training.cloud_entry"]

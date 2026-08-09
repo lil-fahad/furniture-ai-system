@@ -1,0 +1,31 @@
+# Default configuration for Vertex AI training jobs (cloud/vertex_jobs.py).
+# Every value here can be overridden with CLI flags or the GCP_PROJECT /
+# GCP_REGION / GCS_BUCKET environment variables.
+
+# GCP project id. Replace with your own project (placeholder by design).
+project: your-gcp-project-id
+
+# Vertex AI / Cloud Storage region.
+region: us-central1
+
+# GCS staging bucket (no gs:// prefix). Leave empty to default to
+# furniture-ai-training-<project>.
+bucket: ""
+
+# Training container image URI. Leave empty to default to
+# <region>-docker.pkg.dev/<project>/furniture-ai/trainer:latest
+image_uri: ""
+
+# Worker pool sizing.
+machine: g2-standard-4
+accelerator: NVIDIA_L4
+replica_count: 1
+
+# Use spot (preemptible) VMs to cut cost roughly 60-70%.
+spot: true
+
+# Default epochs per task.
+epochs:
+  room: 15
+  segmenter: 25
+  ranker: 1

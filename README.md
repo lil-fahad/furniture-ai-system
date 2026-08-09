@@ -97,3 +97,16 @@ docs/                   Architecture, migration, security, and model docs
 ```
 
 See `docs/MIGRATION.md` for the consolidation decisions and `PROVENANCE.json` for source commits.
+
+## Cloud training on Google Cloud
+
+The training pipelines in `training/` can run on Vertex AI GPU jobs with
+datasets staged in Google Cloud Storage. A single bootstrap script enables the
+APIs, builds the training image, stages the data, and submits the jobs:
+
+```bash
+scripts/gcp_bootstrap.sh --project YOUR_PROJECT --region us-central1
+```
+
+See `cloud/README.md` for the English quickstart and
+`docs/GCP_TRAINING_AR.md` for the detailed Arabic guide (دليل التشغيل على Google Cloud).
