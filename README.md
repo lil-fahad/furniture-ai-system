@@ -10,12 +10,13 @@ A single production-oriented repository for interior-design automation. It repla
 - Optional OpenAI vision refinement and design briefs through `OPENAI_API_KEY`.
 - Product catalog and persistent SQLite booking service.
 - Verified external professional model bundle with safe installation and lazy use.
-- Trained supplier suitability ranker and preference-aware supplier recommendations.
 - Optional DETR, SAM 2.1, Depth Anything V2, and trained EfficientNet-B0 checkpoints.
 - Reproducible training scripts and model manifests.
 - FastAPI, Streamlit, Docker, CI, repository audits, and security tests.
 
 ## Start
+
+Requires Python 3.11 or 3.12 (both are tested in CI).
 
 ```bash
 python -m venv .venv
@@ -32,6 +33,33 @@ For the UI:
 ```bash
 streamlit run apps/streamlit_app.py
 ```
+
+The UI reads `FURNITURE_API_URL` (see `.env.example`) to locate the API.
+
+## API behavior notes
+
+- Uploads that exceed the byte or pixel limits, fail image validation, or trip
+  the decompression-bomb guard are rejected with `422 Unprocessable Entity`
+  before the image is decoded into memory.
+- Degenerate room polygons (collinear or zero-area) posted to `/api/v1/layout`
+  are rejected with `422` instead of a server error.
+- In `production` mode `SERVICE_API_KEY` must be at least 24 characters long;
+  `docker-compose.yml` sets `ENVIRONMENT=production`, so export a compliant key
+  before `docker compose up`.
+
+## Training
+
+Both training scripts support quick CPU smoke runs:
+
+```bash
+# Room classifier: skip the ImageNet weight download with --no-pretrained.
+python training/train_room_classifier.py data/rooms --no-pretrained --epochs 1
+
+# Floor-plan segmenter: remap 0/255 masks to class ids with --mask-remap.
+python training/train_floorplan_segmenter.py data/plans --mask-remap --epochs 1
+```
+
+See `docs/MODELS.md` for dataset expectations and checkpoint policy.
 
 ## Install the professional models
 
@@ -50,24 +78,6 @@ python scripts/model_manifest.py
 ```
 
 See `docs/PROFESSIONAL_MODELS.md` for confirmed sources, revisions, licenses, metrics, and repair limitations.
-
-
-## Supplier recommendation
-
-The repository includes a trained transparent supplier suitability ranker based on the cleaned 41-supplier database. It predicts a suitability prior and then applies transparent preference adjustments for category, dropshipping, 3D availability, direct fulfillment, lead time, MOQ, and price.
-
-```bash
-python training/train_supplier_ranker.py
-uvicorn furniture_ai.api:app --host 0.0.0.0 --port 8000
-```
-
-Example endpoint:
-
-```text
-GET /api/v1/suppliers/recommend?requires_dropshipping=true&requires_3d_models=true&top_k=10
-```
-
-The model is intentionally limited to shortlisting. Its training target is an expert-curated score rather than observed procurement outcomes.
 
 ## Secrets
 

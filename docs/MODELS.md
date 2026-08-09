@@ -2,11 +2,11 @@
 
 ## Core room classifier
 
-`training/train_room_classifier.py` fine-tunes EfficientNet-B0 on an ImageFolder dataset. Its checkpoint includes class labels, architecture, validation accuracy, and deterministic seed metadata.
+`training/train_room_classifier.py` fine-tunes EfficientNet-B0 on an ImageFolder dataset. Its checkpoint includes class labels, architecture, validation accuracy, and deterministic seed metadata. Pass `--no-pretrained` to skip the ImageNet weight download and train from random initialization (useful for offline CPU smoke runs).
 
 ## Floor-plan segmenter
 
-`training/train_floorplan_segmenter.py` trains a compact U-Net for five semantic classes and exports TorchScript. Expected mask labels must be documented by the dataset producer.
+`training/train_floorplan_segmenter.py` trains a compact U-Net for five semantic classes and exports TorchScript. Mask pixel values must be valid class indices (`0 <= label < classes`); training validates this and fails with a clear error otherwise. Masks stored in the common 0/255 convention can be remapped at load time with `--mask-remap`, and masks are always resized with nearest-neighbor interpolation so no phantom class ids are invented.
 
 ## Professional bundle
 
@@ -25,10 +25,3 @@ When `use_openai=true` and `OPENAI_API_KEY` is configured, the whole floor-plan 
 ## Checkpoint policy
 
 Weights are not committed by default. Put locally trained weights at paths listed in `models/manifest.json`, or install the professional bundle through the verified installer. Commit only manifests, source metadata, checksums, and evaluation summaries unless an approved artifact service or Git LFS policy is in place.
-
-
-## Supplier suitability ranker
-
-`training/train_supplier_ranker.py` trains a transparent `Ridge` regressor on `data/suppliers_master.csv.gz.b64`. The committed model lives at `models/supplier_ranker/model.json`; validation metrics and predictions are in `models/supplier_ranker/metrics.json` and `reports/`.
-
-The ranker predicts the curated suitability score from structured supplier attributes. Runtime preference adjustments remain explicit and inspectable. It must not make autonomous purchasing or compliance decisions.
