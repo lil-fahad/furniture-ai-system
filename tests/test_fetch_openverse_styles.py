@@ -29,7 +29,10 @@ def test_normalized_jpeg_is_rgb_and_bounded() -> None:
 
 def test_existing_openverse_ids_ignores_blank_lines(tmp_path: Path) -> None:
     manifest = tmp_path / "sources.jsonl"
-    manifest.write_text('{"openverse_id": "first"}\n\n' + json.dumps({"openverse_id": "second"}), encoding="utf-8")
+    manifest.write_text(
+        '{"openverse_id": "first"}\n\n' + json.dumps({"openverse_id": "second"}),
+        encoding="utf-8",
+    )
 
     assert fetcher.existing_openverse_ids(manifest) == {"first", "second"}
 
