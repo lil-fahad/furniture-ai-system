@@ -17,6 +17,8 @@ Two import paths are available:
 - `scripts/fetch_openverse_styles.py` creates a smaller, reviewable starter
   set from Openverse. Some Openverse deployments now require authentication,
   so a `401 Unauthorized` response means this path is unavailable anonymously.
+- `cloud/openimages_vertex_job.py` builds a much larger licensed subset from
+  Open Images V7 inside a paid Vertex AI NVIDIA GPU job.
 
 ## License and quality policy
 
@@ -42,6 +44,51 @@ Search-derived or mapped labels are weak labels, not human-verified ground
 truth. Inspect samples, remove incorrect labels and duplicates, and keep a
 human-reviewed validation and test set. A 20-image-per-style run is only a
 smoke dataset, not a production-quality training corpus.
+
+## Production Open Images V7 job (100,000 images)
+
+The managed path filters the Open Images boxable training split for images
+with one or more furniture detections, then rejects likely non-interior images
+with SigLIP and accepts only source records whose metadata declares CC BY 2.0
+or CC0. Every normalized image is stored with its author, source URL, original
+landing page, license, SHA-256,
+retrieval time, and weak-label model revision in `manifest.jsonl`.
+
+SigLIP supplies one of the seven style labels. These are pseudo-labels, not
+verified design-style ground truth. The manifest marks low-confidence samples
+for review, and a qualified reviewer must build a separate, human-reviewed
+validation and test set before model claims or production release.
+
+From Google Cloud Shell, use this single command after reviewing the project
+and billing account. It creates billable resources immediately:
+
+```bash
+cd ~/furniture-ai-system && git switch feat/openverse-style-dataset && git pull --ff-only && bash cloud/launch_gcp_training.sh --execute --project round-office-505007-q4 --max-images 100000
+```
+
+The launcher creates or reuses:
+
+- private bucket `gs://furniture-ai-round-office-505007-q4` with uniform
+  bucket-level access and public access prevention;
+- a private Artifact Registry repository and a least-privilege training
+  service account;
+- a Vertex AI `g2-standard-8` worker with one NVIDIA L4 and a 200 GB SSD boot
+  disk, using the NVIDIA PyTorch 26.07 container.
+
+The 100,000-image payload is expected to be roughly 30 GB after normalization,
+but source mix, metadata, container storage, run time, and actual charges vary.
+The job is resumable: keep the same `--run-id` to continue from the manifest in
+GCS. Inspect the output with the commands printed by the launcher, or run:
+
+```bash
+gcloud ai custom-jobs list --project round-office-505007-q4 --region us-central1
+gcloud storage cat gs://furniture-ai-round-office-505007-q4/runs/RUN_ID/status.json
+```
+
+The trained checkpoint is written to
+`gs://furniture-ai-round-office-505007-q4/runs/RUN_ID/models/style_classifier.pth`.
+The bucket and container remain after the managed GPU worker exits so the
+dataset, attribution manifest, and checkpoint are not lost.
 
 ## Inspect a Hugging Face dataset
 

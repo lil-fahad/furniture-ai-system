@@ -3,14 +3,14 @@ from __future__ import annotations
 import argparse
 import os
 import random
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
 import timm
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
 from torchvision import datasets, transforms
 from tqdm import tqdm
 
@@ -117,6 +117,15 @@ def balanced_limit_indices(targets: list[int], limit: int, seed: int) -> list[in
     return selected
 
 
+def balanced_sample_weights(targets: list[int], indices: list[int]) -> list[float]:
+    """Return inverse-frequency weights in the same order as a Subset's indices."""
+
+    counts = Counter(int(targets[index]) for index in indices)
+    if not counts:
+        raise ValueError("Cannot balance an empty training split")
+    return [1.0 / counts[int(targets[index])] for index in indices]
+
+
 def build_transforms(image_size: int) -> tuple[transforms.Compose, transforms.Compose]:
     training = transforms.Compose(
         [
@@ -174,6 +183,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
+    parser.add_argument(
+        "--class-balance",
+        choices=("none", "sampler"),
+        default="none",
+        help="Use inverse-frequency weighted sampling for the training split",
+    )
     parser.add_argument(
         "--early-stopping-patience",
         type=int,
@@ -267,10 +282,20 @@ def main() -> None:
     }
     if args.num_workers > 0:
         loader_options["prefetch_factor"] = 2
+    train_sampler = None
+    if args.class_balance == "sampler":
+        weights = balanced_sample_weights(index_dataset.targets, train_indices)
+        train_sampler = WeightedRandomSampler(
+            weights,
+            num_samples=len(weights),
+            replacement=True,
+            generator=torch.Generator().manual_seed(args.seed),
+        )
     train_loader = DataLoader(
         train_set,
         batch_size=args.batch_size,
-        shuffle=True,
+        shuffle=train_sampler is None,
+        sampler=train_sampler,
         generator=torch.Generator().manual_seed(args.seed),
         **loader_options,
     )
@@ -297,7 +322,8 @@ def main() -> None:
 
     print(
         f"device={device} amp={amp_enabled} tf32={args.tf32 and device.type == 'cuda'} "
-        f"classes={len(classes)} train={len(train_set)} validation={len(validation_set)}",
+        f"classes={len(classes)} train={len(train_set)} validation={len(validation_set)} "
+        f"class_balance={args.class_balance}",
         flush=True,
     )
     for epoch in range(args.epochs):
@@ -358,6 +384,12 @@ def main() -> None:
                     "image_size": args.img_size,
                     "train_images": len(train_set),
                     "validation_images": len(validation_set),
+                    "class_balance": args.class_balance,
+                    "training_class_counts": dict(
+                        sorted(
+                            Counter(index_dataset.targets[index] for index in train_indices).items()
+                        )
+                    ),
                     "normalization": {"mean": IMAGENET_MEAN, "std": IMAGENET_STD},
                 },
                 args.output,
@@ -383,6 +415,10 @@ def main() -> None:
                 "image_size": args.img_size,
                 "train_images": len(train_set),
                 "validation_images": len(validation_set),
+                "class_balance": args.class_balance,
+                "training_class_counts": dict(
+                    sorted(Counter(index_dataset.targets[index] for index in train_indices).items())
+                ),
                 "normalization": {"mean": IMAGENET_MEAN, "std": IMAGENET_STD},
             },
             args.output,

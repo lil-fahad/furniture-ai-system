@@ -1,0 +1,26 @@
+FROM nvcr.io/nvidia/pytorch:26.07-py3
+
+LABEL org.opencontainers.image.title="Furniture AI Open Images trainer"
+LABEL org.opencontainers.image.source="https://github.com/lil-fahad/furniture-ai-system"
+
+ENV HF_HOME=/workspace/job/huggingface \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONUNBUFFERED=1 \
+    TRANSFORMERS_NO_ADVISORY_WARNINGS=1
+
+WORKDIR /opt/furniture-ai-system
+COPY training ./training
+COPY cloud ./cloud
+COPY THIRD_PARTY_NOTICES.md ./THIRD_PARTY_NOTICES.md
+
+RUN python -m pip install --no-cache-dir \
+    "google-cloud-storage>=2.18,<4" \
+    "pillow>=10.3,<13" \
+    "safetensors>=0.4,<1" \
+    "timm>=1.0,<2" \
+    "tqdm>=4.66,<5" \
+    "transformers>=4.57,<6"
+
+ENTRYPOINT ["python", "cloud/openimages_vertex_job.py"]

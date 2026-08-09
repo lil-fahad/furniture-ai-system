@@ -120,6 +120,12 @@ def test_classifier_balanced_limit_preserves_classes() -> None:
     assert all(count >= 2 for count in counts.values())
 
 
+def test_classifier_balanced_sampler_uses_inverse_class_frequency() -> None:
+    targets = [0, 0, 0, 0, 1, 1]
+    weights = classifier.balanced_sample_weights(targets, [0, 1, 2, 3, 4, 5])
+    assert weights == [0.25, 0.25, 0.25, 0.25, 0.5, 0.5]
+
+
 def make_room_dataset(root: Path, per_class: int = 4, size: int = 64) -> None:
     import numpy as np
 
@@ -157,6 +163,8 @@ def test_classifier_trains_one_epoch_offline_and_writes_checkpoint(
             "--num-workers",
             "0",
             "--no-pretrained",
+            "--class-balance",
+            "sampler",
         ],
     )
     classifier.main()
@@ -164,11 +172,10 @@ def test_classifier_trains_one_epoch_offline_and_writes_checkpoint(
     checkpoint = torch.load(output, map_location="cpu", weights_only=False)
     assert checkpoint["architecture"] == "tf_efficientnet_b0"
     assert sorted(checkpoint["classes"]) == ["bedroom", "living_room"]
+    assert checkpoint["class_balance"] == "sampler"
 
 
-def test_classifier_min_images_message(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_classifier_min_images_message(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     make_room_dataset(tmp_path / "rooms", per_class=2)
     monkeypatch.setattr(
         "sys.argv", ["train_room_classifier", str(tmp_path / "rooms"), "--no-pretrained"]
