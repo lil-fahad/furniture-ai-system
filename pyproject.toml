@@ -17,6 +17,7 @@ dependencies = [
   "pydantic>=2.8,<3",
   "pydantic-settings>=2.5,<3",
   "python-multipart>=0.0.18,<1",
+  "scikit-learn>=1.5,<2",
   "shapely>=2,<3",
   "uvicorn[standard]>=0.30,<1",
 ]
