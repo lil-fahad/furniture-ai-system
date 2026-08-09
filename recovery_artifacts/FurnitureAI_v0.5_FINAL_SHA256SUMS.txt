@@ -1,0 +1,3 @@
+7f6970f1c7d417f8a3308609a040857a1762ed9aff6d7f5d854201392e1af6d9  FurnitureAI_Professional_Models_v0.5_FINAL.zip
+2d19594a901d13b979c82670c36e0311adfef237ef572df456c9e2913b98fbcb  FurnitureAI_Intelligence_Source_v0.5_FINAL.zip
+ad5bcb41f567520e0a64f4aaf99f365171daf026ed0ebf08d7f0bc820bf95f23  furniture_ai-0.5.0-py3-none-any.whl
