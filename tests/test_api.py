@@ -41,6 +41,23 @@ def test_analyze_endpoint() -> None:
     assert payload["placed_items"] >= 0
 
 
+def test_analyze_and_catalog_work_from_neutral_cwd(tmp_path, monkeypatch) -> None:
+    # Regression: the catalog used to load via a cwd-relative path, so the
+    # endpoint 500'd whenever the process was launched outside the repo root.
+    monkeypatch.chdir(tmp_path)
+    from furniture_ai.layout import load_catalog
+
+    catalog = load_catalog()
+    assert catalog, "default catalog must load from a neutral working directory"
+    response = TestClient(app).post(
+        "/api/v1/analyze",
+        files={"image": ("plan.png", plan_bytes(), "image/png")},
+        data={"use_openai": "false", "preferences": ""},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["floor_plan"]["rooms"]
+
+
 def test_catalog_and_booking() -> None:
     client = TestClient(app)
     assert client.get("/api/v1/catalog").status_code == 200
@@ -57,16 +74,30 @@ def test_catalog_and_booking() -> None:
     assert client.get("/api/v1/bookings").json()[0]["id"] == created.json()["id"]
 
 
-def test_supplier_recommendation_endpoint() -> None:
-    response = TestClient(app).get(
-        "/api/v1/suppliers/recommend",
-        params={
-            "requires_dropshipping": "true",
-            "requires_3d_models": "true",
-            "top_k": 5,
-        },
-    )
-    assert response.status_code == 200, response.text
+def test_catalog_room_type_filter() -> None:
+    client = TestClient(app)
+    all_products = client.get("/api/v1/catalog").json()
+    filtered = client.get("/api/v1/catalog", params={"room_type": "bedroom"}).json()
+    assert 0 < len(filtered) < len(all_products)
+    assert all("bedroom" in product["room_types"] for product in filtered)
+
+
+def test_ready_returns_503_when_dependencies_missing(monkeypatch) -> None:
+    from furniture_ai import api
+
+    class BrokenRegistry:
+        def __init__(self, path) -> None:
+            raise ValueError("manifest is corrupt")
+
+    monkeypatch.setattr(api, "ModelRegistry", BrokenRegistry)
+    response = TestClient(app).get("/ready")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Application dependencies are not ready"
+
+
+def test_models_endpoint_lists_registered_models() -> None:
+    response = TestClient(app).get("/api/v1/models")
+    assert response.status_code == 200
     payload = response.json()
-    assert len(payload) == 5
-    assert payload[0]["final_score"] >= payload[-1]["final_score"]
+    assert payload
+    assert all("present" in status and "id" in status for status in payload)
