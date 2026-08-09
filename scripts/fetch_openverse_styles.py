@@ -25,7 +25,6 @@ from urllib.request import Request, urlopen
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-
 API_URL = "https://api.openverse.org/v1/images/"
 DEFAULT_STYLES = {
     "minimalist": "minimalist interior design living room",
@@ -342,7 +341,7 @@ def main() -> None:
         raise SystemExit(run(parse_args()))
     except KeyboardInterrupt:
         print("Stopped by user.", file=sys.stderr)
-        raise SystemExit(130)
+        raise SystemExit(130) from None
 
 
 if __name__ == "__main__":
