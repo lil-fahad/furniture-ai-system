@@ -7,6 +7,25 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _anchor(path: Path) -> Path:
+    """Anchor a relative path at PROJECT_ROOT, falling back to the cwd.
+
+    Dev checkouts keep ``data/`` and ``models/`` next to the package source,
+    so relative paths resolve at PROJECT_ROOT regardless of the launch
+    directory. In a wheel install (e.g. the Docker image) the package lands
+    in site-packages and those directories are absent; fall back to the
+    current working directory so a mounted repo at WORKDIR still works.
+    The parent-directory check keeps not-yet-created files (the SQLite
+    database) anchored in dev checkouts before they exist.
+    """
+    anchored = PROJECT_ROOT / path
+    if anchored.exists() or anchored.parent.exists():
+        return anchored
+    return Path.cwd() / path
+
 
 class Settings(BaseSettings):
     environment: Literal["development", "test", "production"] = "development"
@@ -14,14 +33,13 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-5-mini"
     database_path: Path = Path("data/furniture_ai.sqlite3")
+    catalog_path: Path = Path("data/furniture_catalog.json")
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=100 * 1024 * 1024)
     max_image_pixels: int = Field(default=25_000_000, ge=1_000_000, le=100_000_000)
     allowed_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:8501", "http://127.0.0.1:8501"]
     )
     model_manifest_path: Path = Path("models/manifest.json")
-    supplier_data_path: Path = Path("data/suppliers_master.csv.gz.b64")
-    supplier_model_path: Path = Path("models/supplier_ranker/model.json")
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -44,6 +62,16 @@ class Settings(BaseSettings):
             raise ValueError("SERVICE_API_KEY must contain at least 24 characters in production")
         if "*" in self.allowed_origins:
             raise ValueError("Wildcard CORS origins are not allowed")
+        # Anchor relative paths at the project root so the app works when
+        # launched from any working directory, not just the repo root. When
+        # the anchored path is absent (wheel install in site-packages), fall
+        # back to the current working directory.
+        if not self.database_path.is_absolute():
+            self.database_path = _anchor(self.database_path)
+        if not self.catalog_path.is_absolute():
+            self.catalog_path = _anchor(self.catalog_path)
+        if not self.model_manifest_path.is_absolute():
+            self.model_manifest_path = _anchor(self.model_manifest_path)
         return self
 
     @property
