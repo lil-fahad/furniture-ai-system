@@ -133,6 +133,56 @@ def test_download_subset_skips_ids_without_urls(tmp_path: Path) -> None:
     assert counts == {"Chair": 0}
 
 
+def test_stage_datasets_uses_openimages_selection_sidecar(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The staging layout keeps metadata separate from ImageFolder classes."""
+    from training.data_ingest import openimages_furniture
+
+    staging_dir = tmp_path / "staging"
+
+    def fake_fetch_class_index(dest_dir: Path) -> Path:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        path = dest_dir / "class-descriptions.csv"
+        path.write_text("/m/01mzpv,Chair\n", encoding="utf-8")
+        return path
+
+    def fake_select_image_ids(
+        class_names: list[str], max_per_class: int, dest_dir: Path
+    ) -> dict[str, list[str]]:
+        assert max_per_class == 1
+        mapping = {name: [] for name in class_names}
+        mapping["Chair"] = ["deadbeef"]
+        (dest_dir / openimages_furniture.SELECTION_FILENAME).write_text(
+            "class_name,image_id,url\nChair,deadbeef,\n", encoding="utf-8"
+        )
+        return mapping
+
+    def fake_generate_synthetic(dest_dir: Path, n: int) -> dict[str, int]:
+        (dest_dir / "images").mkdir(parents=True)
+        (dest_dir / "masks").mkdir(parents=True)
+        return {"pairs": n, "images": n, "masks": n}
+
+    def fake_prepare_catalog(dest_dir: Path, repo_root: Path) -> Path:
+        del repo_root
+        dest_dir.mkdir(parents=True)
+        path = dest_dir / "suppliers_master.csv.gz"
+        path.write_bytes(b"\x1f\x8b")
+        return path
+
+    monkeypatch.setattr(openimages_furniture, "fetch_class_index", fake_fetch_class_index)
+    monkeypatch.setattr(openimages_furniture, "select_image_ids", fake_select_image_ids)
+    monkeypatch.setattr(floorplans, "generate_synthetic", fake_generate_synthetic)
+    monkeypatch.setattr(catalog, "prepare_catalog", fake_prepare_catalog)
+
+    counts = stage_all.stage_datasets(
+        staging_dir, REPO_ROOT, rooms_max=1, plans_synthetic=0, workers=1
+    )
+
+    assert counts["catalog"] == 1
+    assert (staging_dir / "rooms" / "_meta" / "selection.csv").is_file()
+
+
 @pytest.mark.skipif(True, reason="network test: never hit Open Images endpoints in CI")
 def test_fetch_class_index_network(tmp_path: Path) -> None:  # pragma: no cover
     from training.data_ingest import openimages_furniture

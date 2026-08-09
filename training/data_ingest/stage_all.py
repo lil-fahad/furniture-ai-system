@@ -75,6 +75,7 @@ def stage_datasets(
     """Build the local staging tree; returns per-dataset file counts."""
     staging_dir = Path(staging_dir)
     rooms_dir = staging_dir / "rooms" / "images"
+    rooms_meta_dir = staging_dir / "rooms" / "_meta"
     plans_dir = staging_dir / "plans"
     catalog_dir = staging_dir / "catalog"
 
@@ -83,11 +84,11 @@ def stage_datasets(
     else:
         print(f"==> staging rooms dataset (Open Images, max {rooms_max}/class)")
         class_names = sorted(openimages_furniture.FURNITURE_CLASSES)
-        openimages_furniture.fetch_class_index(staging_dir / "rooms" / "_meta")
-        mapping = openimages_furniture.select_image_ids(
-            class_names, rooms_max, staging_dir / "rooms" / "_meta"
+        openimages_furniture.fetch_class_index(rooms_meta_dir)
+        mapping = openimages_furniture.select_image_ids(class_names, rooms_max, rooms_meta_dir)
+        counts = openimages_furniture.download_subset(
+            mapping, rooms_dir, workers=workers, selection_dir=rooms_meta_dir
         )
-        counts = openimages_furniture.download_subset(mapping, rooms_dir, workers=workers)
         print(f"    rooms downloaded: {sum(counts.values())}")
 
     print(f"==> generating {plans_synthetic} synthetic floor-plan pairs")

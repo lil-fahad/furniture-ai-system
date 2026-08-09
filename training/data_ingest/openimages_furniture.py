@@ -278,16 +278,23 @@ def _download_one(url: str, dest: Path, timeout: int = DEFAULT_TIMEOUT_SECONDS) 
 
 
 def download_subset(
-    mapping: dict[str, list[str]], dest_dir: Path, workers: int = 8
+    mapping: dict[str, list[str]],
+    dest_dir: Path,
+    workers: int = 8,
+    *,
+    selection_dir: Path | None = None,
 ) -> dict[str, int]:
     """Download images for the selected ids into ``dest_dir/<class>/<id>.jpg``.
 
     URLs are resolved from the ``selection.csv`` sidecar written by
-    :func:`select_image_ids`; ids without a recorded URL are skipped. Returns
-    the number of successfully downloaded files per class.
+    :func:`select_image_ids`. By default the sidecar is read from ``dest_dir``;
+    ``selection_dir`` can point at a separate metadata directory when the
+    destination must remain a clean ImageFolder class root. IDs without a
+    recorded URL are skipped. Returns the number of successfully downloaded
+    files per class.
     """
     dest_dir = Path(dest_dir)
-    selection = _load_selection(dest_dir)
+    selection = _load_selection(selection_dir if selection_dir is not None else dest_dir)
     counts: dict[str, int] = {class_name: 0 for class_name in mapping}
 
     jobs: list[tuple[str, str, Path]] = []
