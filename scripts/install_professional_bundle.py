@@ -24,18 +24,25 @@ def main() -> None:
     parser.add_argument("--verify-installed", action="store_true")
     args = parser.parse_args()
 
-    if args.check_spec:
-        result = validate_bundle_spec(args.spec)
-    elif args.verify_installed:
-        result = verify_installed_bundle(args.destination, args.spec)
-    elif args.verify_archive:
-        if args.archive is None:
-            parser.error("archive is required with --verify-archive")
-        result = verify_bundle_archive(args.archive, args.spec)
-    else:
-        if args.archive is None:
-            parser.error("archive is required for installation")
-        result = install_bundle(args.archive, args.destination, args.spec).to_dict()
+    try:
+        if args.check_spec:
+            result = validate_bundle_spec(args.spec)
+        elif args.verify_installed:
+            result = verify_installed_bundle(args.destination, args.spec)
+        elif args.verify_archive:
+            if args.archive is None:
+                parser.error("archive is required with --verify-archive")
+            result = verify_bundle_archive(args.archive, args.spec)
+        else:
+            if args.archive is None:
+                parser.error("archive is required for installation")
+            result = install_bundle(args.archive, args.destination, args.spec).to_dict()
+    except FileNotFoundError as exc:
+        print(json.dumps({"status": "missing", "detail": str(exc)}, indent=2))
+        raise SystemExit(f"error: {exc}") from exc
+    except (ValueError, OSError) as exc:
+        print(json.dumps({"status": "failed", "detail": str(exc)}, indent=2))
+        raise SystemExit(f"error: {exc}") from exc
     print(json.dumps(result, indent=2))
 
 

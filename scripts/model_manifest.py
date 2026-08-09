@@ -19,6 +19,8 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=Path("models/manifest.json"))
     parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
+    if not args.manifest.is_file():
+        parser.error(f"manifest not found: {args.manifest}")
     payload = json.loads(args.manifest.read_text(encoding="utf-8"))
     seen: set[str] = set()
     failures: list[str] = []
