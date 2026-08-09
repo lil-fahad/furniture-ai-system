@@ -1,16 +1,29 @@
 from __future__ import annotations
 
+import importlib.util
 import io
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
-from cloud import openimages_vertex_job as vertex
-
 ROOT = Path(__file__).resolve().parents[1]
+CLOUD_JOB = ROOT / "cloud" / "openimages_vertex_job.py"
+
+
+def load_vertex_module():
+    spec = importlib.util.spec_from_file_location("openimages_vertex_job", CLOUD_JOB)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+vertex = load_vertex_module()
 
 
 def test_bucket_and_run_id_validation() -> None:
