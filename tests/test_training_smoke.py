@@ -105,6 +105,21 @@ def test_segmenter_trains_one_epoch_and_writes_checkpoint(
 classifier = load_training_module("train_room_classifier")
 
 
+def test_classifier_split_keeps_every_class_in_both_sets() -> None:
+    targets = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2]
+    training, validation = classifier.stratified_split_indices(targets, 0.2, seed=42)
+    assert {targets[index] for index in training} == {0, 1, 2}
+    assert {targets[index] for index in validation} == {0, 1, 2}
+    assert set(training).isdisjoint(validation)
+
+
+def test_classifier_balanced_limit_preserves_classes() -> None:
+    targets = [0] * 20 + [1] * 4 + [2] * 4
+    selected = classifier.balanced_limit_indices(targets, limit=12, seed=42)
+    counts = {label: sum(targets[index] == label for index in selected) for label in {0, 1, 2}}
+    assert all(count >= 2 for count in counts.values())
+
+
 def make_room_dataset(root: Path, per_class: int = 4, size: int = 64) -> None:
     import numpy as np
 

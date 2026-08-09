@@ -60,7 +60,8 @@ python training/train_floorplan_segmenter.py data/plans --mask-remap --epochs 1
 ```
 
 See `docs/MODELS.md` for dataset expectations and checkpoint policy.
-For the reviewable Openverse style-data workflow, see `docs/STYLE_DATASET.md`.
+For licensed Hugging Face/Openverse imports and NVIDIA GPU training, see
+`docs/STYLE_DATASET.md`.
 
 ## Install the professional models
 
