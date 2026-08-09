@@ -4,7 +4,6 @@ import importlib.util
 import json
 from pathlib import Path
 
-
 MODULE_PATH = Path(__file__).parents[1] / "scripts" / "fetch_openverse_styles.py"
 SPEC = importlib.util.spec_from_file_location("fetch_openverse_styles", MODULE_PATH)
 assert SPEC and SPEC.loader
@@ -13,8 +12,9 @@ SPEC.loader.exec_module(fetcher)
 
 
 def test_normalized_jpeg_is_rgb_and_bounded() -> None:
-    from PIL import Image
     from io import BytesIO
+
+    from PIL import Image
 
     source = Image.new("RGBA", (2_000, 1_000), (12, 34, 56, 128))
     payload = BytesIO()
