@@ -9,7 +9,10 @@
 # environment variables GCP_PROJECT, GCP_REGION, GCS_BUCKET and RUN_ID plus
 # a `--task {room,segmenter,ranker}` argument (see cloud/vertex_jobs.py).
 
-FROM us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4.py310:latest
+# Official PyTorch CUDA runtime (Python 3.11) — matches requires-python >= 3.11
+# (the repo uses 3.11-only stdlib, e.g. `from datetime import UTC`, inside the
+# container-running code) and works as a Vertex AI custom training container.
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
 
 WORKDIR /app
 
@@ -22,10 +25,7 @@ COPY data ./data
 
 # Install the repo with the [training] extra plus the GCS/Vertex clients
 # used by training.cloud_entry and training.data_ingest.
-# NOTE: the spec-mandated Vertex base image ships Python 3.10 while the repo
-# declares requires-python >= 3.11, so --ignore-requires-python is required
-# for pip to install the package on this base image.
-RUN pip install --no-cache-dir --ignore-requires-python \
+RUN pip install --no-cache-dir \
     ".[training]" \
     "google-cloud-storage>=2.10,<3" \
     "google-cloud-aiplatform>=1.60,<2"
