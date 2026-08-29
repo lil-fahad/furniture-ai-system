@@ -41,9 +41,9 @@ def _resolve_device(requested: str | None = None) -> str:
         raise ProfessionalVisionUnavailable(
             "Install the professional extra to use local Hugging Face vision models"
         ) from exc
+    if requested and requested.startswith("cuda") and not torch.cuda.is_available():
+        raise ProfessionalVisionUnavailable("CUDA was requested but is not available")
     if requested:
-        if requested.startswith("cuda") and not torch.cuda.is_available():
-            raise ProfessionalVisionUnavailable("CUDA was requested but is not available")
         return requested
     return "cuda" if torch.cuda.is_available() else "cpu"
 
