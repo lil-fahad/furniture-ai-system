@@ -8,7 +8,11 @@ from pydantic import SecretStr
 
 from furniture_ai.config import Settings
 from furniture_ai.contracts import FloorPlanAnalysis, Point, Room
-from furniture_ai.openai_service import OpenAIDesignService
+from furniture_ai.openai_service import (
+    OpenAIDesignService,
+    RoomRefinement,
+    RoomRefinementResponse,
+)
 
 
 class FakeResponses:
@@ -39,6 +43,27 @@ def test_openai_refinement_parser_without_network() -> None:
     )
     result = service.refine_room_types(Image.new("RGB", (100, 100), "white"), plan)
     assert result["room-1"] == ("office", 0.91)
+
+
+def test_structured_output_path_filters_unknown_room_ids() -> None:
+    class Responses:
+        def parse(self, **kwargs):
+            assert kwargs["text_format"] is RoomRefinementResponse
+            return SimpleNamespace(
+                output_parsed=RoomRefinementResponse(
+                    rooms=[
+                        RoomRefinement(id="room-1", room_type="kitchen", confidence=0.88),
+                        RoomRefinement(id="invented-room", room_type="office", confidence=0.99),
+                    ]
+                )
+            )
+
+    class Client:
+        responses = Responses()
+
+    settings = Settings(environment="test", openai_api_key=SecretStr("fake-test-key"))
+    service = OpenAIDesignService(settings, client=Client())
+    assert service.refine_room_types(image(), sample_plan()) == {"room-1": ("kitchen", 0.88)}
 
 
 def make_service(output_text: str) -> OpenAIDesignService:
@@ -84,7 +109,7 @@ def test_non_list_rooms_payload_raises_value_error() -> None:
         service.refine_room_types(image(), sample_plan())
 
 
-def test_malformed_items_and_junk_confidence_are_skipped() -> None:
+def test_malformed_items_junk_confidence_and_unknown_rooms_are_skipped() -> None:
     service = make_service(
         '{"rooms": ['
         '"not-a-dict", '
@@ -95,7 +120,14 @@ def test_malformed_items_and_junk_confidence_are_skipped() -> None:
         "]}"
     )
     result = service.refine_room_types(image(), sample_plan())
-    assert result == {"room-1": ("office", 0.5), "room-2": ("living_room", 1.0)}
+    assert result == {"room-1": ("office", 0.5)}
+
+
+def test_unknown_room_type_is_skipped_in_legacy_fallback() -> None:
+    service = make_service(
+        '{"rooms": [{"id": "room-1", "room_type": "spaceship", "confidence": 0.9}]}'
+    )
+    assert service.refine_room_types(image(), sample_plan()) == {}
 
 
 def test_nan_confidence_is_skipped() -> None:
