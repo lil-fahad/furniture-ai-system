@@ -40,6 +40,7 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:8501", "http://127.0.0.1:8501"]
     )
     model_manifest_path: Path = Path("models/manifest.json")
+    professional_models_root: Path = Path("models/professional/installed/pretrained")
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -72,6 +73,8 @@ class Settings(BaseSettings):
             self.catalog_path = _anchor(self.catalog_path)
         if not self.model_manifest_path.is_absolute():
             self.model_manifest_path = _anchor(self.model_manifest_path)
+        if not self.professional_models_root.is_absolute():
+            self.professional_models_root = _anchor(self.professional_models_root)
         return self
 
     @property
@@ -81,6 +84,14 @@ class Settings(BaseSettings):
     @property
     def service_auth_enabled(self) -> bool:
         return bool(self.service_api_key and self.service_api_key.get_secret_value().strip())
+
+    @property
+    def professional_vision_available(self) -> bool:
+        required = (
+            self.professional_models_root / "detr_resnet50" / "model.safetensors",
+            self.professional_models_root / "depth_anything_v2_small" / "model.safetensors",
+        )
+        return all(path.is_file() for path in required)
 
 
 @lru_cache(maxsize=1)
