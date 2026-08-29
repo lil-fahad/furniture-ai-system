@@ -21,7 +21,10 @@ from furniture_ai.image_io import ImageValidationError, load_validated_image
 from furniture_ai.layout import furnish_floor_plan, load_catalog
 from furniture_ai.models import ModelRegistry
 from furniture_ai.pipeline import DesignPipeline
-from furniture_ai.professional_vision import ProfessionalVisionService, ProfessionalVisionUnavailable
+from furniture_ai.professional_vision import (
+    ProfessionalVisionService,
+    ProfessionalVisionUnavailable,
+)
 from furniture_ai.security import require_service_key
 from furniture_ai.storage import BookingStore
 
