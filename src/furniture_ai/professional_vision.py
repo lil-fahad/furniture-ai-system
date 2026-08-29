@@ -100,10 +100,11 @@ def relative_depth_summary(depth: np.ndarray) -> RelativeDepthSummary:
         raise ValueError("Depth prediction contains no finite values")
     minimum = float(finite.min())
     maximum = float(finite.max())
-    if maximum - minimum <= 1e-12:
-        normalized = np.zeros_like(finite)
-    else:
-        normalized = (finite - minimum) / (maximum - minimum)
+    normalized = (
+        np.zeros_like(finite)
+        if maximum - minimum <= 1e-12
+        else (finite - minimum) / (maximum - minimum)
+    )
     p10, median, p90 = np.quantile(normalized, [0.1, 0.5, 0.9])
     return RelativeDepthSummary(p10=float(p10), median=float(median), p90=float(p90))
 
