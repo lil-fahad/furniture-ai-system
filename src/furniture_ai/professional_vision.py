@@ -128,7 +128,8 @@ class ProfessionalVisionService:
             raise ProfessionalVisionUnavailable("PyTorch is required for object detection") from exc
 
         processor, model = _load_detector(str(self.detector_dir), self.device)
-        inputs = _move_inputs(processor(images=image.convert("RGB"), return_tensors="pt"), self.device)
+        processed = processor(images=image.convert("RGB"), return_tensors="pt")
+        inputs = _move_inputs(processed, self.device)
         with torch.inference_mode():
             outputs = model(**inputs)
         target_sizes = torch.tensor([[image.height, image.width]], device=self.device)
@@ -167,7 +168,8 @@ class ProfessionalVisionService:
             raise ProfessionalVisionUnavailable("PyTorch is required for depth estimation") from exc
 
         processor, model = _load_depth_model(str(self.depth_dir), self.device)
-        inputs = _move_inputs(processor(images=image.convert("RGB"), return_tensors="pt"), self.device)
+        processed = processor(images=image.convert("RGB"), return_tensors="pt")
+        inputs = _move_inputs(processed, self.device)
         with torch.inference_mode():
             outputs = model(**inputs)
         predicted = outputs.predicted_depth
