@@ -9,11 +9,19 @@ from starlette.concurrency import run_in_threadpool
 
 from furniture_ai import __version__
 from furniture_ai.config import Settings, get_settings
-from furniture_ai.contracts import Booking, BookingCreate, DesignResult, LayoutRequest, Product
+from furniture_ai.contracts import (
+    Booking,
+    BookingCreate,
+    DesignResult,
+    LayoutRequest,
+    Product,
+    SceneAnalysis,
+)
 from furniture_ai.image_io import ImageValidationError, load_validated_image
 from furniture_ai.layout import furnish_floor_plan, load_catalog
 from furniture_ai.models import ModelRegistry
 from furniture_ai.pipeline import DesignPipeline
+from furniture_ai.professional_vision import ProfessionalVisionService, ProfessionalVisionUnavailable
 from furniture_ai.security import require_service_key
 from furniture_ai.storage import BookingStore
 
@@ -46,6 +54,7 @@ def health() -> dict[str, object]:
         "status": "ok",
         "version": __version__,
         "openai_configured": active.openai_configured,
+        "professional_vision_available": active.professional_vision_available,
         "service_auth_enabled": active.service_auth_enabled,
     }
 
@@ -103,6 +112,46 @@ async def analyze_and_design(
         use_openai=use_openai,
         preferences=preferences,
     )
+
+
+@app.post(
+    "/api/v1/scene",
+    response_model=SceneAnalysis,
+    dependencies=[Depends(require_service_key)],
+    tags=["vision"],
+)
+async def analyze_room_scene(
+    image: Annotated[UploadFile, File(...)],
+    active_settings: Annotated[Settings, Depends(get_settings)],
+    detection_threshold: Annotated[float, Form(ge=0, le=1)] = 0.55,
+    include_depth: Annotated[bool, Form()] = True,
+) -> SceneAnalysis:
+    """Analyze a real room photo with the verified local Hugging Face models."""
+    data = await image.read(active_settings.max_upload_bytes + 1)
+    if len(data) > active_settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail="The uploaded image exceeds the configured byte limit",
+        )
+    try:
+        loaded = await run_in_threadpool(
+            load_validated_image, data, image.content_type, active_settings
+        )
+    except ImageValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        service = ProfessionalVisionService(active_settings.professional_models_root)
+        return await run_in_threadpool(
+            service.analyze,
+            loaded,
+            detection_threshold=detection_threshold,
+            include_depth=include_depth,
+        )
+    except ProfessionalVisionUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Professional vision inference failed") from exc
 
 
 @app.post(
