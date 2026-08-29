@@ -4,10 +4,12 @@ A single production-oriented repository for interior-design automation. It repla
 
 ## Included capabilities
 
-- Secure floor-plan image upload and validation.
+- Secure floor-plan and room-photo image upload and validation.
 - Deterministic room extraction using OpenCV, with safe fallbacks.
 - Constraint-based furniture placement using Shapely.
 - Optional OpenAI vision refinement and design briefs through `OPENAI_API_KEY`.
+- Schema-constrained OpenAI room refinement with legacy-client compatibility.
+- Offline professional room-photo analysis using verified local Hugging Face DETR and Depth Anything V2 weights.
 - Product catalog and persistent SQLite booking service.
 - Verified external professional model bundle with safe installation and lazy use.
 - Optional DETR, SAM 2.1, Depth Anything V2, and trained EfficientNet-B0 checkpoints.
@@ -46,6 +48,34 @@ The UI reads `FURNITURE_API_URL` (see `.env.example`) to locate the API.
 - In `production` mode `SERVICE_API_KEY` must be at least 24 characters long;
   `docker-compose.yml` sets `ENVIRONMENT=production`, so export a compliant key
   before `docker compose up`.
+- `/api/v1/scene` is optional and returns `503` when the verified professional
+  model bundle or its runtime dependencies are not installed. It never downloads
+  model weights implicitly at request time.
+- Depth Anything V2 output is normalized per image and remains relative depth;
+  it must not be treated as centimeters, meters, or cross-image metric depth.
+
+## Professional room-photo vision
+
+Install the professional runtime and the verified model bundle:
+
+```bash
+pip install -e ".[professional]"
+python scripts/install_professional_bundle.py \
+  /path/to/FurnitureAI_Professional_Models_v0.4.1_REPAIRED.zip
+```
+
+Then submit a real room photo to the local API:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/scene \
+  -F "image=@room.jpg" \
+  -F "detection_threshold=0.55" \
+  -F "include_depth=true"
+```
+
+The endpoint uses the locally verified `facebook/detr-resnet-50` and
+`depth-anything/Depth-Anything-V2-Small-hf` artifacts from the professional
+bundle. Models are loaded lazily and cached in-process after first use.
 
 ## Training
 
