@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 
@@ -33,11 +33,17 @@ class SupplierProvenance:
                 "Supplier source_sha256 must be a 64-character SHA-256 digest"
             )
         try:
-            datetime.fromisoformat(self.retrieved_at.replace("Z", "+00:00"))
+            parsed_timestamp = datetime.fromisoformat(
+                self.retrieved_at.replace("Z", "+00:00")
+            )
         except ValueError as exc:
             raise SupplierAuthorizationError(
                 "Supplier retrieved_at must be an ISO-8601 timestamp"
             ) from exc
+        if parsed_timestamp.tzinfo is None:
+            raise SupplierAuthorizationError(
+                "Supplier retrieved_at must include an explicit timezone"
+            )
         if not self.authorization_id.strip():
             raise SupplierAuthorizationError("Supplier authorization_id is required")
         if not self.authorized_by.strip():
@@ -84,4 +90,4 @@ def authorize_supplier_row(row: Mapping[str, str]) -> SupplierProvenance:
 
 def utc_now_iso() -> str:
     """Return a UTC timestamp for ingestion metadata creation."""
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
