@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Mapping
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 
@@ -23,13 +23,27 @@ class SupplierProvenance:
     def validate(self) -> None:
         parsed = urlparse(self.source_uri)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise SupplierAuthorizationError("Supplier source_uri must be an absolute HTTP(S) URL")
-        if len(self.source_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in self.source_sha256):
-            raise SupplierAuthorizationError("Supplier source_sha256 must be a 64-character SHA-256 digest")
+            raise SupplierAuthorizationError(
+                "Supplier source_uri must be an absolute HTTP(S) URL"
+            )
+        if len(self.source_sha256) != 64 or any(
+            c not in "0123456789abcdefABCDEF" for c in self.source_sha256
+        ):
+            raise SupplierAuthorizationError(
+                "Supplier source_sha256 must be a 64-character SHA-256 digest"
+            )
         try:
-            datetime.fromisoformat(self.retrieved_at.replace("Z", "+00:00"))
+            parsed_timestamp = datetime.fromisoformat(
+                self.retrieved_at.replace("Z", "+00:00")
+            )
         except ValueError as exc:
-            raise SupplierAuthorizationError("Supplier retrieved_at must be an ISO-8601 timestamp") from exc
+            raise SupplierAuthorizationError(
+                "Supplier retrieved_at must be an ISO-8601 timestamp"
+            ) from exc
+        if parsed_timestamp.tzinfo is None:
+            raise SupplierAuthorizationError(
+                "Supplier retrieved_at must include an explicit timezone"
+            )
         if not self.authorization_id.strip():
             raise SupplierAuthorizationError("Supplier authorization_id is required")
         if not self.authorized_by.strip():
@@ -53,10 +67,14 @@ def authorize_supplier_row(row: Mapping[str, str]) -> SupplierProvenance:
     must explicitly call this gate. Authorization is never inferred from
     supplier claims, URLs, catalog fields, or model scores.
     """
-    missing = [field for field in REQUIRED_AUTHORIZATION_FIELDS if not str(row.get(field, "")).strip()]
+    missing = [
+        field for field in REQUIRED_AUTHORIZATION_FIELDS
+        if not str(row.get(field, "")).strip()
+    ]
     if missing:
         raise SupplierAuthorizationError(
-            "Supplier record is not production-authorized; missing: " + ", ".join(missing)
+            "Supplier record is not production-authorized; missing: "
+            + ", ".join(missing)
         )
 
     provenance = SupplierProvenance(
@@ -72,4 +90,4 @@ def authorize_supplier_row(row: Mapping[str, str]) -> SupplierProvenance:
 
 def utc_now_iso() -> str:
     """Return a UTC timestamp for ingestion metadata creation."""
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")

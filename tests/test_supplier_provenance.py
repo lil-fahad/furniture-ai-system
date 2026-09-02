@@ -28,7 +28,14 @@ def test_authorized_supplier_row_returns_immutable_provenance() -> None:
 
 @pytest.mark.parametrize(
     "field",
-    ["supplier_id", "source_uri", "source_sha256", "retrieved_at", "authorization_id", "authorized_by"],
+    [
+        "supplier_id",
+        "source_uri",
+        "source_sha256",
+        "retrieved_at",
+        "authorization_id",
+        "authorized_by",
+    ],
 )
 def test_missing_authorization_metadata_is_rejected(field: str) -> None:
     row = _authorized_row()
