@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Annotated
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
+from starlette.responses import Response
 
 from furniture_ai import __version__
 from furniture_ai.config import Settings, get_settings
@@ -30,8 +32,18 @@ app.add_middleware(
     allow_origins=get_settings().allowed_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "X-API-Key"],
+    allow_headers=["Content-Type", "X-API-Key", "X-Correlation-ID"],
 )
+
+
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next) -> Response:
+    """Attach a bounded correlation ID to every response without trusting user input."""
+    supplied = request.headers.get("X-Correlation-ID", "").strip()
+    correlation_id = supplied[:128] if supplied else str(uuid4())
+    response = await call_next(request)
+    response.headers["X-Correlation-ID"] = correlation_id
+    return response
 
 
 @lru_cache(maxsize=1)
@@ -87,8 +99,6 @@ async def analyze_and_design(
             status_code=413,
             detail="The uploaded image exceeds the configured byte limit",
         )
-    # Image decode/validation and the OpenCV pipeline are blocking CPU work;
-    # run them in the threadpool so the event loop stays responsive.
     try:
         loaded = await run_in_threadpool(
             load_validated_image, data, image.content_type, active_settings
