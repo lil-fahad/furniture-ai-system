@@ -40,6 +40,30 @@ def test_layout_is_deterministic_and_non_overlapping() -> None:
         assert not any(shape.intersects(other) for other in shapes[index + 1 :])
 
 
+def test_deterministic_placements_do_not_claim_calibrated_confidence() -> None:
+    floor_plan = FloorPlanAnalysis(
+        source_width=800,
+        source_height=600,
+        rooms=[
+            Room(
+                id="room-1",
+                room_type="living_room",
+                polygon=[
+                    Point(x=20, y=20),
+                    Point(x=780, y=20),
+                    Point(x=780, y=580),
+                    Point(x=20, y=580),
+                ],
+                area=425_600,
+            )
+        ],
+    )
+    result = furnish_floor_plan(floor_plan)
+    placements = result.floor_plan.rooms[0].furniture
+    assert placements
+    assert all(item.confidence is None for item in placements)
+
+
 def _room(room_id: str, room_type: str, size: float = 560.0) -> Room:
     return Room(
         id=room_id,
