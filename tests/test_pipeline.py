@@ -149,11 +149,11 @@ def test_refine_room_types_rejects_null_rooms() -> None:
         service.refine_room_types(Image.new("RGB", (64, 64), "white"), _plan())
 
 
-def test_refine_room_types_skips_junk_items() -> None:
+def test_refine_room_types_skips_junk_and_unknown_room_ids() -> None:
     payload = (
         '{"rooms": ["junk", {"id": "room-1", "room_type": "office", "confidence": "high"},'
         ' {"id": "room-2", "room_type": "kitchen", "confidence": 0.7}]}'
     )
     service = _service_with_payload(payload)
     result = service.refine_room_types(Image.new("RGB", (64, 64), "white"), _plan())
-    assert result == {"room-2": ("kitchen", 0.7)}
+    assert result == {}
