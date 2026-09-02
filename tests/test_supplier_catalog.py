@@ -41,6 +41,16 @@ def test_normalize_supplier_row_preserves_identity_and_normalizes_values() -> No
     assert normalized.values["Official Website"] == "https://example.com/"
 
 
+def test_normalize_supplier_row_values_are_immutable() -> None:
+    normalized = normalize_supplier_row({"Supplier Name": "Acme"})
+    try:
+        normalized.values["Supplier Name"] = "changed"
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("normalized supplier values must be immutable")
+
+
 def test_deduplication_preserves_first_seen_record_without_merging() -> None:
     rows = [
         {
