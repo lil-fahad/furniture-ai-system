@@ -47,7 +47,11 @@ class OpenAIDesignService:
                 from openai import OpenAI
             except ImportError as exc:
                 raise OpenAIUnavailable("Install the openai package to use AI refinement") from exc
-            client = OpenAI(api_key=key)
+            client = OpenAI(
+                api_key=key,
+                timeout=settings.openai_timeout_seconds,
+                max_retries=1,
+            )
         self.client = client
         self.model = settings.openai_model
 
@@ -60,6 +64,7 @@ class OpenAIDesignService:
             {"id": room.id, "area": room.area, "current_type": room.room_type}
             for room in floor_plan.rooms
         ]
+        valid_ids = {room.id for room in floor_plan.rooms}
         prompt = (
             "Analyze this architectural floor plan. Return JSON only with this shape: "
             '{"rooms":[{"id":"room-1","room_type":"living_room",'
@@ -88,11 +93,27 @@ class OpenAIDesignService:
         if not isinstance(rooms, list):
             raise ValueError("The model response 'rooms' field must be a list")
         result: dict[str, tuple[str, float]] = {}
+        allowed_room_types = {
+            "living_room",
+            "bedroom",
+            "kitchen",
+            "bathroom",
+            "dining_room",
+            "office",
+            "hallway",
+            "storage",
+            "balcony",
+            "room",
+        }
         for item in rooms:
             if not isinstance(item, dict):
                 continue
             room_id = str(item.get("id", ""))
+            if room_id not in valid_ids:
+                continue
             room_type = str(item.get("room_type", "room")).strip().lower().replace(" ", "_")
+            if room_type not in allowed_room_types:
+                continue
             try:
                 confidence = float(item.get("confidence", 0.5))
             except (TypeError, ValueError):
@@ -100,15 +121,13 @@ class OpenAIDesignService:
             if not math.isfinite(confidence):
                 continue
             confidence = min(max(confidence, 0.0), 1.0)
-            if room_id:
-                result[room_id] = (room_type, confidence)
+            result[room_id] = (room_type, confidence)
         return result
 
     def create_design_brief(self, floor_plan: FloorPlanAnalysis, preferences: str) -> str:
         prompt = (
             "Create a concise professional interior-design brief. Respect circulation, doors, room "
-            "dimensions, and the furniture placements in the supplied JSON. Do not claim "
-            "exact physical "
+            "dimensions, and the furniture placements in the supplied JSON. Do not claim exact physical "
             "dimensions when pixels_per_cm is absent. Preferences: "
             f"{preferences}\nFloor plan JSON: {floor_plan.model_dump_json()}"
         )
