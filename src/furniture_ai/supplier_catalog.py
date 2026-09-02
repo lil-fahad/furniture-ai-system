@@ -5,6 +5,7 @@ import re
 import unicodedata
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from urllib.parse import urlsplit, urlunsplit
 
 
@@ -48,7 +49,7 @@ class NormalizedSupplierRow:
     """Immutable normalized view; original fields remain untouched elsewhere."""
 
     identity_key: str
-    values: dict[str, str]
+    values: Mapping[str, str]
 
 
 def normalize_supplier_row(row: Mapping[str, object]) -> NormalizedSupplierRow:
@@ -56,7 +57,10 @@ def normalize_supplier_row(row: Mapping[str, object]) -> NormalizedSupplierRow:
     for key in ("source_url", "Official Website", "profile_link", "Profile Link"):
         if key in row:
             values[key] = normalize_url(row[key])
-    return NormalizedSupplierRow(identity_key=supplier_row_key(row), values=values)
+    return NormalizedSupplierRow(
+        identity_key=supplier_row_key(row),
+        values=MappingProxyType(values),
+    )
 
 
 def deduplicate_supplier_rows(rows: Iterable[Mapping[str, object]]) -> list[dict[str, object]]:
