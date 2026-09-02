@@ -8,6 +8,7 @@ from PIL import Image
 from shapely.geometry import Polygon
 
 from furniture_ai.contracts import FloorPlanAnalysis, Point, Room, Unit
+from furniture_ai.floorplan_quality import assess_room_geometry
 
 
 class FloorPlanAnalyzer:
@@ -44,16 +45,25 @@ class FloorPlanAnalyzer:
             warnings.append("No enclosed rooms were detected; a whole-plan fallback room was used")
 
         room_types = infer_room_types(room_polygons)
-        rooms = [
-            Room(
-                id=f"room-{index + 1}",
-                room_type=room_types[index],
-                polygon=[Point(x=float(x), y=float(y)) for x, y in polygon.exterior.coords[:-1]],
-                area=float(polygon.area),
-                confidence=0.55 if len(room_polygons) > 1 else 0.35,
+        rooms: list[Room] = []
+        for index, polygon in enumerate(room_polygons):
+            assessment = assess_room_geometry(
+                polygon,
+                image_width=image.width,
+                image_height=image.height,
             )
-            for index, polygon in enumerate(room_polygons)
-        ]
+            warnings.extend(f"room-{index + 1}: {warning}" for warning in assessment.warnings)
+            rooms.append(
+                Room(
+                    id=f"room-{index + 1}",
+                    room_type=room_types[index],
+                    polygon=[Point(x=float(x), y=float(y)) for x, y in polygon.exterior.coords[:-1]],
+                    area=float(polygon.area),
+                    # This remains semantic-label confidence, not geometry quality.
+                    confidence=0.55 if len(room_polygons) > 1 else 0.35,
+                )
+            )
+
         warnings.append(
             "Door and window extraction requires a trained segmenter and was not inferred"
         )
@@ -84,7 +94,6 @@ class FloorPlanAnalyzer:
             cv2.floodFill(flood, mask, seed, 128)
             interior = np.where(flood == 255, 255, 0).astype(np.uint8)
         else:
-            # No reachable exterior free space: nothing can be a verified room interior.
             interior = np.zeros_like(free_space)
         interior = cv2.morphologyEx(interior, cv2.MORPH_OPEN, kernel, iterations=1)
 
@@ -100,14 +109,7 @@ class FloorPlanAnalyzer:
             top = int(stats[label, cv2.CC_STAT_TOP])
             right = left + int(stats[label, cv2.CC_STAT_WIDTH])
             bottom = top + int(stats[label, cv2.CC_STAT_HEIGHT])
-            if (
-                left <= 0
-                or top <= 0
-                or right >= interior.shape[1]
-                or bottom >= interior.shape[0]
-            ):
-                # Components touching the image border are exterior background,
-                # not enclosed rooms.
+            if left <= 0 or top <= 0 or right >= interior.shape[1] or bottom >= interior.shape[0]:
                 continue
             component = np.where(labels == label, 255, 0).astype(np.uint8)
             contours, _ = cv2.findContours(component, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -128,16 +130,8 @@ class FloorPlanAnalyzer:
 
 
 def _find_exterior_seed(free_space: np.ndarray) -> tuple[int, int] | None:
-    """Return an (x, y) seed pixel guaranteed to be in free space.
-
-    The exterior background is reachable from the image border, so border free
-    pixels are scanned first (deterministic order). If the whole border is wall
-    (e.g. a plan cropped exactly at its outer walls), any free pixel is used as
-    a last resort. Returns None when the image contains no free space at all.
-    """
+    """Return an (x, y) seed pixel guaranteed to be in free space."""
     height, width = free_space.shape
-    # Vectorized border scan (same deterministic order as before: top row
-    # left→right, bottom row right→left, then left/right columns top→bottom).
     top = np.flatnonzero(free_space[0, :] == 255)
     if top.size:
         return (int(top[0]), 0)
@@ -175,6 +169,4 @@ def infer_room_types(polygons: Iterable[Polygon]) -> list[str]:
     for rank, original_index in enumerate(ranked):
         if rank < len(templates):
             result[original_index] = templates[rank]
-        # Beyond the template list keep the generic "room" label instead of
-        # mislabeling every remaining room as "office".
     return result
