@@ -29,16 +29,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install runtime and development dependencies
-        run: python -m pip install -e ".[dev]"
+      - name: Install runtime, development, and training dependencies
+        run: python -m pip install -e ".[dev,training]"
       - name: Install pip-audit
         run: python -m pip install --upgrade pip-audit
       - name: Dependency security audit
         run: |
           python -m pip freeze | grep -v '^furniture-ai-system==' > /tmp/requirements-audit.txt
           pip-audit --strict -r /tmp/requirements-audit.txt
-      - name: Install training dependencies
-        run: python -m pip install -e ".[training]"
       - name: Lint
         run: ruff check .
       - name: Compile
