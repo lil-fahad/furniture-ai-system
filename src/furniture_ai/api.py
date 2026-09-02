@@ -51,6 +51,8 @@ def get_booking_store() -> BookingStore:
 
 
 def _model_registry(active_settings: Settings) -> ModelRegistry:
+    if active_settings.model_manifest_path.is_file():
+        return ModelRegistry(active_settings.model_manifest_path)
     return ModelRegistry(
         active_settings.model_manifest_path,
         allow_packaged_default="model_manifest_path" not in active_settings.model_fields_set,
