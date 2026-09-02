@@ -84,7 +84,7 @@ def test_non_list_rooms_payload_raises_value_error() -> None:
         service.refine_room_types(image(), sample_plan())
 
 
-def test_malformed_items_and_junk_confidence_are_skipped() -> None:
+def test_malformed_items_and_unknown_room_ids_are_skipped() -> None:
     service = make_service(
         '{"rooms": ['
         '"not-a-dict", '
@@ -95,7 +95,7 @@ def test_malformed_items_and_junk_confidence_are_skipped() -> None:
         "]}"
     )
     result = service.refine_room_types(image(), sample_plan())
-    assert result == {"room-1": ("office", 0.5), "room-2": ("living_room", 1.0)}
+    assert result == {"room-1": ("office", 0.5)}
 
 
 def test_nan_confidence_is_skipped() -> None:
