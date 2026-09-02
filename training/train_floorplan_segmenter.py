@@ -21,6 +21,21 @@ def seed_everything(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def resolve_device(requested: str) -> torch.device:
+    normalized = requested.strip().lower()
+    if normalized == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if normalized == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA was requested but no NVIDIA GPU is visible to PyTorch")
+        return torch.device("cuda")
+    if normalized == "cpu":
+        return torch.device("cpu")
+    raise ValueError(f"Unknown device {requested!r}; expected auto, cpu, or cuda")
 
 
 class FloorPlanDataset(Dataset):
@@ -147,6 +162,17 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="Cap the number of training pairs")
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument(
+        "--device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+        help="Training device. Explicit cuda fails closed when no NVIDIA GPU is visible.",
+    )
+    parser.add_argument(
+        "--amp",
+        action="store_true",
+        help="Enable CUDA automatic mixed precision. Ignored on CPU.",
+    )
+    parser.add_argument(
         "--mask-remap",
         choices=["none", "auto"],
         default="none",
@@ -169,10 +195,19 @@ def main() -> None:
     loader = DataLoader(
         dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers
     )
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = resolve_device(args.device)
+    use_amp = bool(args.amp and device.type == "cuda")
+    if args.amp and not use_amp:
+        print("AMP requested but CUDA is not active; continuing with full precision")
+    if device.type == "cuda":
+        print(f"training device=cuda gpu={torch.cuda.get_device_name(0)} amp={use_amp}")
+    else:
+        print("training device=cpu amp=False")
+
     model = SmallUNet(classes=args.classes).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
     criterion = nn.CrossEntropyLoss()
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
     for epoch in range(args.epochs):
         model.train()
@@ -180,9 +215,11 @@ def main() -> None:
         for images, masks in tqdm(loader, desc=f"epoch {epoch + 1}"):
             images, masks = images.to(device), masks.to(device)
             optimizer.zero_grad(set_to_none=True)
-            loss = criterion(model(images), masks)
-            loss.backward()
-            optimizer.step()
+            with torch.amp.autocast("cuda", enabled=use_amp):
+                loss = criterion(model(images), masks)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             running += float(loss.item())
         print(f"epoch={epoch + 1} loss={running / max(len(loader), 1):.5f}")
 
