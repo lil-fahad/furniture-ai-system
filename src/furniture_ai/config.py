@@ -89,7 +89,11 @@ class Settings(BaseSettings):
             self.professional_models_root / "detr_resnet50",
             self.professional_models_root / "depth_anything_v2_small",
         )
-        return all((model_dir / name).is_file() for model_dir in model_dirs for name in required_names)
+        return all(
+            (model_dir / name).is_file()
+            for model_dir in model_dirs
+            for name in required_names
+        )
 
 
 @lru_cache(maxsize=1)
