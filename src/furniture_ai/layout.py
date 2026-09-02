@@ -173,7 +173,10 @@ def furnish_floor_plan(
                     depth=depth,
                     rotation_degrees=angle,
                     dimension_source=source,
-                    confidence=0.82,
+                    # This is a deterministic constraint-satisfaction result,
+                    # not a calibrated probability. Leave confidence unknown
+                    # until a measured placement benchmark exists.
+                    confidence=None,
                     source_product_id=product.id,
                 )
             )
