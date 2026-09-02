@@ -8,6 +8,7 @@ from PIL import Image
 from shapely.geometry import Polygon
 
 from furniture_ai.contracts import FloorPlanAnalysis, Point, Room, Unit
+from furniture_ai.floorplan_quality import assess_room_geometry
 
 
 class FloorPlanAnalyzer:
@@ -44,16 +45,30 @@ class FloorPlanAnalyzer:
             warnings.append("No enclosed rooms were detected; a whole-plan fallback room was used")
 
         room_types = infer_room_types(room_polygons)
-        rooms = [
-            Room(
-                id=f"room-{index + 1}",
-                room_type=room_types[index],
-                polygon=[Point(x=float(x), y=float(y)) for x, y in polygon.exterior.coords[:-1]],
-                area=float(polygon.area),
-                confidence=0.55 if len(room_polygons) > 1 else 0.35,
+        rooms: list[Room] = []
+        for index, polygon in enumerate(room_polygons):
+            room_id = f"room-{index + 1}"
+            assessment = assess_room_geometry(
+                polygon,
+                image_width=image.width,
+                image_height=image.height,
             )
-            for index, polygon in enumerate(room_polygons)
-        ]
+            warnings.extend(f"{room_id}: {warning}" for warning in assessment.warnings)
+            room_points = [
+                Point(x=float(x), y=float(y))
+                for x, y in polygon.exterior.coords[:-1]
+            ]
+            rooms.append(
+                Room(
+                    id=room_id,
+                    room_type=room_types[index],
+                    polygon=room_points,
+                    area=float(polygon.area),
+                    # This remains semantic-label confidence, not geometry quality.
+                    confidence=0.55 if len(room_polygons) > 1 else 0.35,
+                )
+            )
+
         warnings.append(
             "Door and window extraction requires a trained segmenter and was not inferred"
         )
@@ -136,8 +151,6 @@ def _find_exterior_seed(free_space: np.ndarray) -> tuple[int, int] | None:
     a last resort. Returns None when the image contains no free space at all.
     """
     height, width = free_space.shape
-    # Vectorized border scan (same deterministic order as before: top row
-    # left→right, bottom row right→left, then left/right columns top→bottom).
     top = np.flatnonzero(free_space[0, :] == 255)
     if top.size:
         return (int(top[0]), 0)
