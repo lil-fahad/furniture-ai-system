@@ -3,9 +3,8 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Mapping
 from urllib.parse import urlsplit, urlunsplit
 
 
@@ -34,7 +33,9 @@ def normalize_supplier_id(value: object) -> str:
 def supplier_row_key(row: Mapping[str, object]) -> str:
     """Build a stable identity key; do not use model scores or descriptive claims."""
     supplier_id = normalize_supplier_id(row.get("supplier_id") or row.get("Supplier ID"))
-    product_id = normalize_text(row.get("product_id") or row.get("Product ID") or row.get("SKU"))
+    product_id = normalize_text(
+        row.get("product_id") or row.get("Product ID") or row.get("SKU")
+    )
     source_url = normalize_url(row.get("source_url") or row.get("Official Website"))
     supplier_name = normalize_text(row.get("supplier_name") or row.get("Supplier Name"))
     category = normalize_text(row.get("category") or row.get("Main Category"))
