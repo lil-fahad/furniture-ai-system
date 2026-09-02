@@ -12,7 +12,7 @@ def test_normalize_text_is_deterministic() -> None:
 
 
 def test_normalize_url_removes_fragment_and_trailing_slash() -> None:
-    assert normalize_url("HTTPS://Example.COM/catalog/#item") == "https://example.com/catalog/"
+    assert normalize_url("HTTPS://Example.COM/catalog/#item") == "https://example.com/catalog"
 
 
 def test_supplier_row_key_is_stable_for_formatting_changes() -> None:
