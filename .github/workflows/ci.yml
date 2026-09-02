@@ -12,17 +12,31 @@ env:
   PYTHONPATH: ${{ github.workspace }}/src
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   quality:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install
+      - name: Install runtime, development, and training dependencies
         run: python -m pip install -e ".[dev,training]"
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip-audit
+      - name: Dependency security audit
+        run: |
+          python -m pip freeze | grep -v '^furniture-ai-system==' > /tmp/requirements-audit.txt
+          pip-audit --strict -r /tmp/requirements-audit.txt
       - name: Lint
         run: ruff check .
       - name: Compile

@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     service_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-5-mini"
+    openai_timeout_seconds: float = Field(default=60.0, gt=0, le=300)
     database_path: Path = Path("data/furniture_ai.sqlite3")
     catalog_path: Path = Path("data/furniture_catalog.json")
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=100 * 1024 * 1024)
@@ -63,9 +64,8 @@ class Settings(BaseSettings):
         if "*" in self.allowed_origins:
             raise ValueError("Wildcard CORS origins are not allowed")
         # Anchor relative paths at the project root so the app works when
-        # launched from any working directory, not just the repo root. When
-        # the anchored path is absent (wheel install in site-packages), fall
-        # back to the current working directory.
+        # launched from any working directory. When the anchored path is
+        # absent (wheel install in site-packages), fall back to the cwd.
         if not self.database_path.is_absolute():
             self.database_path = _anchor(self.database_path)
         if not self.catalog_path.is_absolute():
