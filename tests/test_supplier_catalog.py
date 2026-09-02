@@ -43,9 +43,24 @@ def test_normalize_supplier_row_preserves_identity_and_normalizes_values() -> No
 
 def test_deduplication_preserves_first_seen_record_without_merging() -> None:
     rows = [
-        {"Supplier ID": "S1", "Product ID": "P1", "Supplier Name": "Acme", "Main Category": "Sofa"},
-        {"Supplier ID": "S1", "Product ID": "P1", "Supplier Name": " acme ", "Main Category": "sofa"},
-        {"Supplier ID": "S1", "Product ID": "P2", "Supplier Name": "Acme", "Main Category": "Sofa"},
+        {
+            "Supplier ID": "S1",
+            "Product ID": "P1",
+            "Supplier Name": "Acme",
+            "Main Category": "Sofa",
+        },
+        {
+            "Supplier ID": "S1",
+            "Product ID": "P1",
+            "Supplier Name": " acme ",
+            "Main Category": "sofa",
+        },
+        {
+            "Supplier ID": "S1",
+            "Product ID": "P2",
+            "Supplier Name": "Acme",
+            "Main Category": "Sofa",
+        },
     ]
     result = deduplicate_supplier_rows(rows)
     assert result == [rows[0], rows[2]]
@@ -53,7 +68,19 @@ def test_deduplication_preserves_first_seen_record_without_merging() -> None:
 
 def test_conflicting_product_records_are_not_silently_merged() -> None:
     rows = [
-        {"Supplier ID": "S1", "Product ID": "P1", "Supplier Name": "Acme", "Main Category": "Sofa", "MOQ": "1"},
-        {"Supplier ID": "S1", "Product ID": "P1", "Supplier Name": "Acme", "Main Category": "Chair", "MOQ": "10"},
+        {
+            "Supplier ID": "S1",
+            "Product ID": "P1",
+            "Supplier Name": "Acme",
+            "Main Category": "Sofa",
+            "MOQ": "1",
+        },
+        {
+            "Supplier ID": "S1",
+            "Product ID": "P1",
+            "Supplier Name": "Acme",
+            "Main Category": "Chair",
+            "MOQ": "10",
+        },
     ]
     assert len(deduplicate_supplier_rows(rows)) == 2
