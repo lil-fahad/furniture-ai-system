@@ -27,7 +27,9 @@ def _image_data_url(image: Image.Image) -> str:
 def _json_object(text: str) -> dict[str, object]:
     cleaned = text.strip()
     if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(
+            r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE
+        )
     start, end = cleaned.find("{"), cleaned.rfind("}")
     if start < 0 or end <= start:
         raise ValueError("The model response did not contain a JSON object")
@@ -127,9 +129,9 @@ class OpenAIDesignService:
     def create_design_brief(self, floor_plan: FloorPlanAnalysis, preferences: str) -> str:
         prompt = (
             "Create a concise professional interior-design brief. Respect circulation, doors, room "
-            "dimensions, and the furniture placements in the supplied JSON. Do not claim exact physical "
-            "dimensions when pixels_per_cm is absent. Preferences: "
-            f"{preferences}\nFloor plan JSON: {floor_plan.model_dump_json()}"
+            "dimensions, and the furniture placements in the supplied JSON. "
+            "Do not claim exact physical dimensions when pixels_per_cm is absent. "
+            f"Preferences: {preferences}\nFloor plan JSON: {floor_plan.model_dump_json()}"
         )
         response = self.client.responses.create(model=self.model, input=prompt)
         return response.output_text.strip()
