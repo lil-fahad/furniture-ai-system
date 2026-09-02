@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "policy": {
+    "real_camera_images_only": true,
+    "generated_images_allowed": false,
+    "raw_data_committed_to_git": false
+  },
+  "datasets": [
+    {
+      "id": "homeobjects-3k",
+      "name": "HomeObjects-3K",
+      "kind": "real_indoor_rgb",
+      "task": "object_detection",
+      "images": 2689,
+      "classes": ["bed", "sofa", "chair", "table", "lamp", "wardrobe"],
+      "license": "AGPL-3.0",
+      "url": "https://github.com/ultralytics/assets/releases/download/v0.0.0/homeobjects-3K.zip",
+      "automatic": true
+    },
+    {
+      "id": "pix3d",
+      "name": "Pix3D",
+      "kind": "real_rgb_plus_3d",
+      "task": "segmentation_pose_reconstruction",
+      "images": 10069,
+      "classes": ["bed", "bookcase", "chair", "desk", "sofa", "table", "tool", "wardrobe", "misc"],
+      "license": "Review upstream terms before commercial use",
+      "url": "https://pix3d.csail.mit.edu/data/pix3d.zip",
+      "automatic": true
+    },
+    {
+      "id": "ikea-products",
+      "name": "IKEA Dataset",
+      "kind": "real_product_rgb_plus_metadata",
+      "task": "visual_search_and_catalog_matching",
+      "images": 12600,
+      "license": "Research repository; verify image rights before commercial use",
+      "url": "https://github.com/valexande/IKEA-Dataset.git",
+      "automatic": true
+    },
+    {
+      "id": "sun-rgbd",
+      "name": "SUN RGB-D",
+      "kind": "real_indoor_rgbd",
+      "task": "2d_3d_scene_understanding",
+      "images": 10335,
+      "license": "Research use; accept and follow upstream terms",
+      "url": "https://rgbd.cs.princeton.edu/",
+      "automatic": false
+    },
+    {
+      "id": "objectnet3d",
+      "name": "ObjectNet3D",
+      "kind": "real_rgb_plus_3d_alignment",
+      "task": "detection_pose_shape_retrieval",
+      "images": 90127,
+      "license": "MIT for toolbox; source-image terms also apply",
+      "url": "https://cvgl.stanford.edu/projects/objectnet3d/",
+      "automatic": false
+    },
+    {
+      "id": "open-images-v7-furniture",
+      "name": "Open Images V7 furniture subset",
+      "kind": "real_web_rgb",
+      "task": "object_detection_and_style_pseudolabeling",
+      "images": 100000,
+      "license": "Per-image license restricted by the existing pipeline to CC BY 2.0 or CC0",
+      "url": "https://storage.googleapis.com/openimages/web/index.html",
+      "automatic": false,
+      "project_entrypoint": "cloud/launch_gcp_training.sh"
+    }
+  ]
+}
