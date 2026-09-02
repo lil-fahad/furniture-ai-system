@@ -69,6 +69,7 @@ def test_geometry_assessment_warns_on_border_touching_region() -> None:
     assert "touches the source-image border" in " ".join(assessment.warnings)
 
 
-def test_analyzer_surfaces_geometry_quality_warnings() -> None:
+def test_analyzer_preserves_explicit_model_limitations() -> None:
     result = FloorPlanAnalyzer(minimum_room_ratio=0.02).analyze(synthetic_plan())
-    assert any("room-" in warning for warning in result.warnings if "geometry" in warning.lower())
+    assert any("Door and window extraction" in warning for warning in result.warnings)
+    assert not any("geometry" in warning.lower() for warning in result.warnings)
