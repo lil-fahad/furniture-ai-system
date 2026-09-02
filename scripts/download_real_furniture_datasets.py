@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import shutil
 import subprocess
 import sys
 import urllib.request
@@ -79,7 +78,14 @@ def clone_ikea(destination: Path) -> None:
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        ["git", "clone", "--depth", "1", "https://github.com/valexande/IKEA-Dataset.git", str(destination)],
+        [
+            "git",
+            "clone",
+            "--depth",
+            "1",
+            "https://github.com/valexande/IKEA-Dataset.git",
+            str(destination),
+        ],
         check=True,
     )
 

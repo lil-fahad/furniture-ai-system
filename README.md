@@ -49,15 +49,74 @@ The UI reads `FURNITURE_API_URL` (see `.env.example`) to locate the API.
 
 ## Training
 
-Both training scripts support quick CPU smoke runs:
+Both training pipelines are reproducible and support CPU smoke runs.
 
 ```bash
 # Room classifier: skip the ImageNet weight download with --no-pretrained.
 python training/train_room_classifier.py data/rooms --no-pretrained --epochs 1
 
-# Floor-plan segmenter: remap 0/255 masks to class ids with --mask-remap.
-python training/train_floorplan_segmenter.py data/plans --mask-remap --epochs 1
+# Floor-plan segmenter: remap raw 0/255 masks to contiguous class ids.
+python training/train_floorplan_segmenter.py data/plans \
+  --mask-remap auto \
+  --epochs 1 \
+  --size 256 \
+  --device cpu
 ```
+
+The floor-plan segmenter accepts either a flat dataset:
+
+```text
+data/plans/
+├── images/
+└── masks/
+```
+
+or explicit held-out splits:
+
+```text
+data/plans/
+├── images/
+│   ├── train/
+│   ├── validation/
+│   └── test/
+└── masks/
+    ├── train/
+    ├── validation/
+    └── test/
+```
+
+When named splits exist they are preserved. Otherwise a deterministic validation split is created from the training pairs. The script selects the best checkpoint by validation mean IoU and records pixel accuracy, mean IoU, mean Dice, per-class metrics, epoch history, dataset counts, mask remapping and test metrics when a test split is present.
+
+A normal GPU run can use mixed precision:
+
+```bash
+python training/train_floorplan_segmenter.py data/plans \
+  --mask-remap auto \
+  --epochs 30 \
+  --batch-size 8 \
+  --device cuda \
+  --amp \
+  --output models/floorplan_segmenter/unet.pt
+```
+
+The default companion files are:
+
+```text
+models/floorplan_segmenter/unet.pt              # best TorchScript model
+models/floorplan_segmenter/unet.checkpoint.pth  # resumable training state
+models/floorplan_segmenter/unet.metrics.json    # reproducible metrics/provenance
+```
+
+Resume an interrupted run with the exact class count and image size used originally:
+
+```bash
+python training/train_floorplan_segmenter.py data/plans \
+  --mask-remap auto \
+  --epochs 30 \
+  --resume models/floorplan_segmenter/unet.checkpoint.pth
+```
+
+Do not present metrics from synthetic or tiny smoke datasets as production accuracy. Model promotion requires held-out real floor plans, provenance, licensing review, SHA-256-pinned artifacts and comparison against the deterministic OpenCV baseline.
 
 See `docs/MODELS.md` for dataset expectations and checkpoint policy.
 For licensed Hugging Face/Openverse imports and the 100,000-image Open Images
