@@ -54,11 +54,15 @@ class FloorPlanAnalyzer:
                 image_height=image.height,
             )
             warnings.extend(f"{room_id}: {warning}" for warning in assessment.warnings)
+            room_points = [
+                Point(x=float(x), y=float(y))
+                for x, y in polygon.exterior.coords[:-1]
+            ]
             rooms.append(
                 Room(
                     id=room_id,
                     room_type=room_types[index],
-                    polygon=[Point(x=float(x), y=float(y)) for x, y in polygon.exterior.coords[:-1]],
+                    polygon=room_points,
                     area=float(polygon.area),
                     # This remains semantic-label confidence, not geometry quality.
                     confidence=0.55 if len(room_polygons) > 1 else 0.35,
