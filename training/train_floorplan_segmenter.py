@@ -553,7 +553,10 @@ def main() -> None:
         if current_miou > best_miou:
             best_miou = current_miou
             epochs_without_improvement = 0
-            best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
+            best_state = {
+                key: value.detach().cpu().clone()
+                for key, value in model.state_dict().items()
+            }
         else:
             epochs_without_improvement += 1
 
