@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from importlib import resources
 from pathlib import Path
 
 from shapely.affinity import rotate
@@ -19,19 +20,35 @@ from furniture_ai.contracts import (
 WALL_CATEGORIES = {"sofa", "bed", "wardrobe", "tv_unit", "desk", "cabinet"}
 
 
-@lru_cache(maxsize=1)
+def _catalog_text(path: str | Path | None) -> str:
+    if path is not None:
+        source = Path(path)
+        if not source.is_file():
+            raise FileNotFoundError(f"Furniture catalog not found: {source}")
+        return source.read_text(encoding="utf-8")
+
+    from furniture_ai.config import get_settings
+
+    settings = get_settings()
+    source = Path(settings.catalog_path)
+    if source.is_file():
+        return source.read_text(encoding="utf-8")
+    if "catalog_path" in settings.model_fields_set:
+        raise FileNotFoundError(f"Furniture catalog not found: {source}")
+    resource = resources.files("furniture_ai.resources").joinpath("furniture_catalog.json")
+    return resource.read_text(encoding="utf-8")
+
+
+@lru_cache(maxsize=8)
 def load_catalog(path: str | Path | None = None) -> list[Product]:
-    """Load the furniture catalog.
+    """Load an explicit catalog or the packaged default.
 
-    Defaults to ``Settings.catalog_path`` (env-driven via ``CATALOG_PATH``,
-    anchored at the project root), so the API and CLI work from any working
-    directory. An explicit ``path`` overrides the setting (used by tests).
+    Explicit/configured custom paths fail closed when missing. Only the
+    untouched default setting may fall back to the wheel-packaged catalog.
     """
-    if path is None:
-        from furniture_ai.config import get_settings
-
-        path = get_settings().catalog_path
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    payload = json.loads(_catalog_text(path))
+    if not isinstance(payload, list):
+        raise ValueError("Furniture catalog must contain a JSON array")
     return [Product.model_validate(item) for item in payload]
 
 

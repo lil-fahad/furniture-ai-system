@@ -45,6 +45,9 @@ furniture-ai = "furniture_ai.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"furniture_ai.resources" = ["*.json"]
+
 [tool.pytest.ini_options]
 addopts = "-q --disable-warnings"
 testpaths = ["tests"]

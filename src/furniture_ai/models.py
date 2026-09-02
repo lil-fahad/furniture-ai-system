@@ -4,6 +4,7 @@ import hashlib
 import json
 import threading
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 
 
@@ -34,10 +35,20 @@ def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
 
 
 class ModelRegistry:
-    def __init__(self, manifest_path: Path) -> None:
-        self.manifest_path = manifest_path
-        self.base_dir = manifest_path.parent
-        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    def __init__(self, manifest_path: Path, *, allow_packaged_default: bool = False) -> None:
+        self.manifest_path = Path(manifest_path)
+        self.base_dir = self.manifest_path.parent
+        if self.manifest_path.is_file():
+            text = self.manifest_path.read_text(encoding="utf-8")
+        elif allow_packaged_default:
+            resource = resources.files("furniture_ai.resources").joinpath("model_manifest.json")
+            text = resource.read_text(encoding="utf-8")
+        else:
+            raise FileNotFoundError(f"Model manifest not found: {self.manifest_path}")
+
+        payload = json.loads(text)
+        if not isinstance(payload, dict) or not isinstance(payload.get("models"), list):
+            raise ValueError("Model manifest must contain a models array")
         self.schema_version = int(payload.get("schema_version", 1))
         self.entries = payload["models"]
         ids = [str(entry["id"]) for entry in self.entries]
@@ -133,8 +144,6 @@ def safe_load_room_classifier(path: Path, num_classes: int | None = None):
         or 8
     )
     architecture = str(checkpoint.get("architecture", "tf_efficientnet_b0"))
-    # Detect the checkpoint layout from its keys first: torchvision
-    # EfficientNet uses ``features.``/``classifier.N`` naming, timm does not.
     torchvision_layout = any(key.startswith("features.") for key in state_dict)
     if torchvision_layout:
         try:
@@ -168,14 +177,12 @@ def load_room_classifier_cached(path: Path, num_classes: int | None = None):
     size/mtime so a replaced checkpoint is reloaded instead of served stale.
     """
     resolved = str(Path(path).resolve())
-    stat = Path(path).stat()  # raises FileNotFoundError for missing files, as before
+    stat = Path(path).stat()
     key = (resolved, num_classes, stat.st_size, stat.st_mtime_ns)
     with _MODEL_CACHE_LOCK:
         cached = _MODEL_CACHE.get(key)
         if cached is not None:
             return cached
-    # Load outside the lock so concurrent first-time callers do not serialize
-    # on the (slow) weight load; setdefault keeps exactly one winner.
     model = safe_load_room_classifier(path, num_classes=num_classes)
     with _MODEL_CACHE_LOCK:
         return _MODEL_CACHE.setdefault(key, model)
