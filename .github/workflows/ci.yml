@@ -31,11 +31,10 @@ jobs:
           cache: pip
       - name: Install runtime and development dependencies
         run: python -m pip install -e ".[dev]"
-      - name: Dependency security audit and remediation
+      - name: Dependency security audit
         run: |
           python -m pip install --upgrade pip-audit
-          pip-audit --strict --fix
-          pip-audit --strict
+          pip-audit --strict --skip-editable
       - name: Install training dependencies
         run: python -m pip install -e ".[training]"
       - name: Lint
