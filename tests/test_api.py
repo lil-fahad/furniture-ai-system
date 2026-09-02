@@ -29,6 +29,20 @@ def test_health_never_exposes_secret(monkeypatch) -> None:
     assert response.json()["openai_configured"] is True
 
 
+def test_api_adds_generated_correlation_id() -> None:
+    response = TestClient(app).get("/health")
+    correlation_id = response.headers.get("X-Correlation-ID")
+    assert response.status_code == 200
+    assert correlation_id
+    assert len(correlation_id) <= 128
+
+
+def test_api_preserves_bounded_correlation_id() -> None:
+    supplied = "request-123"
+    response = TestClient(app).get("/health", headers={"X-Correlation-ID": supplied})
+    assert response.headers["X-Correlation-ID"] == supplied
+
+
 def test_analyze_endpoint() -> None:
     response = TestClient(app).post(
         "/api/v1/analyze",
@@ -42,8 +56,6 @@ def test_analyze_endpoint() -> None:
 
 
 def test_analyze_and_catalog_work_from_neutral_cwd(tmp_path, monkeypatch) -> None:
-    # Regression: the catalog used to load via a cwd-relative path, so the
-    # endpoint 500'd whenever the process was launched outside the repo root.
     monkeypatch.chdir(tmp_path)
     from furniture_ai.layout import load_catalog
 
