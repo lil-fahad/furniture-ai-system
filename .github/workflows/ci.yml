@@ -51,6 +51,35 @@ jobs:
           python scripts/model_manifest.py
       - name: Test
         run: pytest --cov=furniture_ai --cov-report=term-missing
+      - name: Smoke-test standalone wheel resources
+        if: ${{ matrix.python-version == '3.12' }}
+        run: |
+          rm -rf /tmp/furniture-wheel /tmp/furniture-wheel-target
+          mkdir -p /tmp/furniture-wheel /tmp/furniture-wheel-target
+          python -m pip wheel --no-deps --wheel-dir /tmp/furniture-wheel .
+          python -m pip install --no-deps \
+            --target /tmp/furniture-wheel-target /tmp/furniture-wheel/*.whl
+          (
+            cd /tmp
+            PYTHONPATH=/tmp/furniture-wheel-target python - <<'PY'
+          from furniture_ai.config import Settings
+          from furniture_ai.layout import load_catalog
+          from furniture_ai.models import ModelRegistry
+
+          settings = Settings(environment="test")
+          catalog = load_catalog()
+          registry = ModelRegistry(
+              settings.model_manifest_path,
+              allow_packaged_default=(
+                  "model_manifest_path" not in settings.model_fields_set
+              ),
+          )
+          statuses = registry.statuses()
+          assert catalog and catalog[0].id == "sofa-3-seat"
+          assert len(statuses) == 8
+          print("standalone wheel runtime resources verified")
+          PY
+          )
       - name: Verify OpenAI secret wiring without disclosure
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
