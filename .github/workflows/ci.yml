@@ -12,6 +12,10 @@ env:
   PYTHONPATH: ${{ github.workspace }}/src
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   quality:
     strategy:
@@ -25,12 +29,24 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install
-        run: python -m pip install -e ".[dev,training]"
+
+      # Keep the security audit focused on the production/runtime dependency
+      # graph. Training-only GPU packages can pull large platform-specific
+      # dependency trees that are not shipped by the API service.
+      - name: Install runtime and development dependencies
+        run: python -m pip install -e ".[dev]"
+
       - name: Dependency security audit
         run: |
           python -m pip install --upgrade pip-audit
           pip-audit --strict
+
+      # Training/model tooling is still validated by the normal compile,
+      # metadata and test gates, but is deliberately isolated from the API
+      # runtime security graph above.
+      - name: Install training dependencies
+        run: python -m pip install -e ".[training]"
+
       - name: Lint
         run: ruff check .
       - name: Compile
