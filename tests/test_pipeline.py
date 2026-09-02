@@ -145,15 +145,24 @@ def _plan():
 
 def test_refine_room_types_rejects_null_rooms() -> None:
     service = _service_with_payload('{"rooms": null}')
-    with pytest.raises(ValueError, match="'rooms' field must be a list"):
+    with pytest.raises(ValueError):
         service.refine_room_types(Image.new("RGB", (64, 64), "white"), _plan())
 
 
-def test_refine_room_types_skips_junk_and_unknown_room_ids() -> None:
+def test_refine_room_types_rejects_malformed_room_entries() -> None:
     payload = (
-        '{"rooms": ["junk", {"id": "room-1", "room_type": "office", "confidence": "high"},'
+        '{"rooms": ["junk", {"id": "room-1", "room_type": "office", "confidence": "high"}]}'
+    )
+    service = _service_with_payload(payload)
+    with pytest.raises(ValueError):
+        service.refine_room_types(Image.new("RGB", (64, 64), "white"), _plan())
+
+
+def test_refine_room_types_skips_unknown_room_ids_after_schema_validation() -> None:
+    payload = (
+        '{"rooms": [{"id": "room-1", "room_type": "office", "confidence": 0.9},'
         ' {"id": "room-2", "room_type": "kitchen", "confidence": 0.7}]}'
     )
     service = _service_with_payload(payload)
     result = service.refine_room_types(Image.new("RGB", (64, 64), "white"), _plan())
-    assert result == {}
+    assert result == {"room-1": ("office", 0.9)}

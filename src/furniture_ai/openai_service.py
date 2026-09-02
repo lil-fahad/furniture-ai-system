@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import base64
 import json
-import math
 import re
 from io import BytesIO
 from typing import Any
 
 from PIL import Image
 
+from furniture_ai.ai_contracts import RoomRefinementResponse, room_refinement_json_schema
 from furniture_ai.config import Settings
 from furniture_ai.contracts import FloorPlanAnalysis
 
@@ -25,6 +25,12 @@ def _image_data_url(image: Image.Image) -> str:
 
 
 def _json_object(text: str) -> dict[str, object]:
+    """Parse a JSON object from text for backward-compatible utility callers.
+
+    Room refinement no longer relies on this tolerant parser; it uses strict
+    Structured Outputs and a typed Pydantic contract instead.
+    """
+
     cleaned = text.strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(
@@ -68,11 +74,11 @@ class OpenAIDesignService:
         ]
         valid_ids = {room.id for room in floor_plan.rooms}
         prompt = (
-            "Analyze this architectural floor plan. Return JSON only with this shape: "
-            '{"rooms":[{"id":"room-1","room_type":"living_room",'
-            '"confidence":0.85}]}. Use the supplied room ids exactly. Prefer these labels: '
-            "living_room, bedroom, kitchen, bathroom, dining_room, office, hallway, storage, "
-            f"balcony, room. Geometric candidates: {json.dumps(room_summary)}"
+            "Analyze the architectural floor plan and refine only the semantic room labels for "
+            "the supplied geometric candidates. Use the supplied room ids exactly. Do not create "
+            "rooms, coordinates, dimensions, openings, or furniture. If a room is visually "
+            "ambiguous, lower the confidence rather than inventing detail. Geometric candidates: "
+            f"{json.dumps(room_summary)}"
         )
         response = self.client.responses.create(
             model=self.model,
@@ -89,41 +95,23 @@ class OpenAIDesignService:
                     ],
                 }
             ],
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "room_refinements",
+                    "schema": room_refinement_json_schema(),
+                    "strict": True,
+                }
+            },
         )
-        payload = _json_object(response.output_text)
-        rooms = payload.get("rooms", [])
-        if not isinstance(rooms, list):
-            raise ValueError("The model response 'rooms' field must be a list")
+        structured = RoomRefinementResponse.model_validate_json(response.output_text)
         result: dict[str, tuple[str, float]] = {}
-        allowed_room_types = {
-            "living_room",
-            "bedroom",
-            "kitchen",
-            "bathroom",
-            "dining_room",
-            "office",
-            "hallway",
-            "storage",
-            "balcony",
-            "room",
-        }
-        for item in rooms:
-            if not isinstance(item, dict):
+        for item in structured.rooms:
+            # Structured Outputs enforces shape and supported labels, but room
+            # identity remains a local trust boundary and must be checked here.
+            if item.id not in valid_ids:
                 continue
-            room_id = str(item.get("id", ""))
-            if room_id not in valid_ids:
-                continue
-            room_type = str(item.get("room_type", "room")).strip().lower().replace(" ", "_")
-            if room_type not in allowed_room_types:
-                continue
-            try:
-                confidence = float(item.get("confidence", 0.5))
-            except (TypeError, ValueError):
-                continue
-            if not math.isfinite(confidence):
-                continue
-            confidence = min(max(confidence, 0.0), 1.0)
-            result[room_id] = (room_type, confidence)
+            result[item.id] = (item.room_type, item.confidence)
         return result
 
     def create_design_brief(self, floor_plan: FloorPlanAnalysis, preferences: str) -> str:
