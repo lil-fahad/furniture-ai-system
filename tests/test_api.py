@@ -17,6 +17,13 @@ def plan_bytes() -> bytes:
     return buffer.getvalue()
 
 
+def room_bytes() -> bytes:
+    image = Image.new("RGB", (320, 240), "white")
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG")
+    return buffer.getvalue()
+
+
 def test_health_never_exposes_secret(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-a-real-secret-value")
     from furniture_ai.config import get_settings
@@ -27,6 +34,7 @@ def test_health_never_exposes_secret(monkeypatch) -> None:
     text = response.text
     assert "not-a-real-secret-value" not in text
     assert response.json()["openai_configured"] is True
+    assert "professional_vision_available" in response.json()
 
 
 def test_analyze_endpoint() -> None:
@@ -41,9 +49,55 @@ def test_analyze_endpoint() -> None:
     assert payload["placed_items"] >= 0
 
 
+def test_scene_endpoint_without_loading_real_models(monkeypatch) -> None:
+    from furniture_ai import api
+    from furniture_ai.contracts import RelativeDepthSummary, SceneAnalysis
+
+    class FakeVisionService:
+        def __init__(self, models_root) -> None:
+            self.models_root = models_root
+
+        def analyze(self, image, *, detection_threshold, include_depth):
+            assert detection_threshold == 0.6
+            assert include_depth is True
+            return SceneAnalysis(
+                source_width=image.width,
+                source_height=image.height,
+                relative_depth=RelativeDepthSummary(p10=0.1, median=0.5, p90=0.9),
+                model_ids=["fake-detr", "fake-depth"],
+            )
+
+    monkeypatch.setattr(api, "ProfessionalVisionService", FakeVisionService)
+    response = TestClient(app).post(
+        "/api/v1/scene",
+        files={"image": ("room.jpg", room_bytes(), "image/jpeg")},
+        data={"detection_threshold": "0.6", "include_depth": "true"},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["source_width"] == 320
+    assert payload["relative_depth"]["median"] == 0.5
+    assert payload["model_ids"] == ["fake-detr", "fake-depth"]
+
+
+def test_scene_endpoint_reports_missing_professional_bundle(monkeypatch) -> None:
+    from furniture_ai import api
+    from furniture_ai.professional_vision import ProfessionalVisionUnavailable
+
+    class MissingVisionService:
+        def __init__(self, models_root) -> None:
+            raise ProfessionalVisionUnavailable("professional bundle missing")
+
+    monkeypatch.setattr(api, "ProfessionalVisionService", MissingVisionService)
+    response = TestClient(app).post(
+        "/api/v1/scene",
+        files={"image": ("room.jpg", room_bytes(), "image/jpeg")},
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"] == "professional bundle missing"
+
+
 def test_analyze_and_catalog_work_from_neutral_cwd(tmp_path, monkeypatch) -> None:
-    # Regression: the catalog used to load via a cwd-relative path, so the
-    # endpoint 500'd whenever the process was launched outside the repo root.
     monkeypatch.chdir(tmp_path)
     from furniture_ai.layout import load_catalog
 

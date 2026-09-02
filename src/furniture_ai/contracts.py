@@ -95,6 +95,49 @@ class FloorPlanAnalysis(BaseModel):
         return self
 
 
+class BoundingBox(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    x_min: NonNegativeFloat
+    y_min: NonNegativeFloat
+    x_max: NonNegativeFloat
+    y_max: NonNegativeFloat
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> BoundingBox:
+        if self.x_max < self.x_min or self.y_max < self.y_min:
+            raise ValueError("Bounding-box maximums must not be smaller than minimums")
+        return self
+
+
+class SceneObject(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: str = Field(min_length=1, max_length=120)
+    confidence: Confidence
+    box: BoundingBox
+
+
+class RelativeDepthSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    p10: Confidence
+    median: Confidence
+    p90: Confidence
+    note: str = (
+        "Per-image normalized relative depth only; values are not physical dimensions "
+        "and must not be compared across images without calibration."
+    )
+
+
+class SceneAnalysis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    schema_version: str = "1.0"
+    source_width: int = Field(gt=0)
+    source_height: int = Field(gt=0)
+    objects: list[SceneObject] = Field(default_factory=list)
+    relative_depth: RelativeDepthSummary | None = None
+    model_ids: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class LayoutRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     floor_plan: FloorPlanAnalysis

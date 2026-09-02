@@ -41,6 +41,7 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:8501", "http://127.0.0.1:8501"]
     )
     model_manifest_path: Path = Path("models/manifest.json")
+    professional_models_root: Path = Path("models/professional/installed/pretrained")
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -63,15 +64,14 @@ class Settings(BaseSettings):
             raise ValueError("SERVICE_API_KEY must contain at least 24 characters in production")
         if "*" in self.allowed_origins:
             raise ValueError("Wildcard CORS origins are not allowed")
-        # Anchor relative paths at the project root so the app works when
-        # launched from any working directory. When the anchored path is
-        # absent (wheel install in site-packages), fall back to the cwd.
         if not self.database_path.is_absolute():
             self.database_path = _anchor(self.database_path)
         if not self.catalog_path.is_absolute():
             self.catalog_path = _anchor(self.catalog_path)
         if not self.model_manifest_path.is_absolute():
             self.model_manifest_path = _anchor(self.model_manifest_path)
+        if not self.professional_models_root.is_absolute():
+            self.professional_models_root = _anchor(self.professional_models_root)
         return self
 
     @property
@@ -81,6 +81,15 @@ class Settings(BaseSettings):
     @property
     def service_auth_enabled(self) -> bool:
         return bool(self.service_api_key and self.service_api_key.get_secret_value().strip())
+
+    @property
+    def professional_vision_available(self) -> bool:
+        required_names = ("config.json", "model.safetensors", "preprocessor_config.json")
+        model_dirs = (
+            self.professional_models_root / "detr_resnet50",
+            self.professional_models_root / "depth_anything_v2_small",
+        )
+        return all((model_dir / name).is_file() for model_dir in model_dirs for name in required_names)
 
 
 @lru_cache(maxsize=1)
