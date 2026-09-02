@@ -173,7 +173,7 @@ def furnish_floor_plan(
                     depth=depth,
                     rotation_degrees=angle,
                     dimension_source=source,
-                    confidence=0.82,
+                    confidence=None,
                     source_product_id=product.id,
                 )
             )
