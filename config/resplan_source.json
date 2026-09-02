@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "dataset": "ResPlan",
+  "source_repository": "https://github.com/m-agour/ResPlan",
+  "revision": "e2b78fe069aee1ab1e1828a612743f308e3c32a7",
+  "data_license": "CC BY 4.0",
+  "code_license": "MIT",
+  "source_archive": "ResPlan.zip",
+  "source_pickle": "ResPlan.pkl",
+  "canonical_splits": {
+    "train": 13053,
+    "validation": 1632,
+    "test": 1632,
+    "augmented": 683
+  },
+  "safe_export_schema": "furnitureai-resplan-wkt-v1",
+  "training_target_classes": {
+    "0": "background",
+    "1": "room",
+    "2": "wall",
+    "3": "door",
+    "4": "window"
+  },
+  "policy": {
+    "include_augmented_in_test": false,
+    "require_archive_sha256_before_unpickle": true,
+    "require_explicit_trusted_pickle_opt_in": true,
+    "training_consumes_pickle_directly": false,
+    "filter_cross_split_geometry_signatures": true
+  },
+  "notes": [
+    "ResPlan publishes vector geometry only; source listing images are not redistributed.",
+    "The upstream README reports near-duplicate plans across canonical splits, so FurnitureAI applies an additional geometry-signature leakage filter for derived raster datasets.",
+    "The external pickle is a conversion input only. Training consumes the exported JSONL/WKT representation and generated image/mask pairs."
+  ]
+}
