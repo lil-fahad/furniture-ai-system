@@ -8,13 +8,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   PYTHONPATH: ${{ github.workspace }}/src
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -34,7 +38,9 @@ jobs:
       - name: Test
         run: pytest --cov=furniture_ai --cov-report=term-missing
       - name: Verify secret wiring without disclosure
-        if: env.OPENAI_API_KEY != ''
+        if: ${{ secrets.OPENAI_API_KEY != '' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           python - <<'PY'
           from furniture_ai.config import get_settings
