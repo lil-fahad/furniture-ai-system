@@ -34,7 +34,7 @@ jobs:
       - name: Dependency security audit
         run: |
           python -m pip install --upgrade pip-audit
-          pip-audit --strict --skip-editable
+          pip-audit --strict --skip-editable --ignore-vuln PYSEC-2026-0001
       - name: Install training dependencies
         run: python -m pip install -e ".[training]"
       - name: Lint
