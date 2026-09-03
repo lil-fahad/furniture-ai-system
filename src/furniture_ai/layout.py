@@ -33,7 +33,7 @@ def _catalog_text(path: str | Path | None) -> str:
     source = Path(settings.catalog_path)
     if source.is_file():
         return source.read_text(encoding="utf-8")
-    if "catalog_path" in settings.model_fields_set:
+    if settings.catalog_path_overridden:
         raise FileNotFoundError(f"Furniture catalog not found: {source}")
     resource = resources.files("furniture_ai.resources").joinpath("furniture_catalog.json")
     return resource.read_text(encoding="utf-8")
@@ -53,21 +53,12 @@ def load_catalog(path: str | Path | None = None) -> list[Product]:
 
 
 def room_polygon(points: list[Point]) -> Polygon:
-    """Build a valid Shapely polygon from room boundary points.
-
-    Raises:
-        ValueError: if the points do not describe a usable room — fewer than
-            three points, a self-intersecting ring that collapses under
-            ``buffer(0)``, or a degenerate (zero-area/collinear) shape. The
-            API layer maps this to HTTP 422.
-    """
+    """Build a valid Shapely polygon from room boundary points."""
     if len(points) < 3:
         raise ValueError("Room polygon requires at least three points")
     polygon = Polygon([(point.x, point.y) for point in points]).buffer(0)
     if polygon.is_empty or not isinstance(polygon, Polygon):
-        raise ValueError(
-            "Room polygon is invalid: self-intersecting or collapsed geometry"
-        )
+        raise ValueError("Room polygon is invalid: self-intersecting or collapsed geometry")
     if polygon.area <= 0:
         raise ValueError("Room polygon is degenerate: zero-area (collinear points)")
     return polygon
@@ -135,13 +126,7 @@ def furnish_floor_plan(
     room_type_overrides: dict[str, str] | None = None,
     catalog: list[Product] | None = None,
 ) -> DesignResult:
-    """Furnish a floor plan without mutating the caller's object.
-
-    The input is deep-copied so repeated calls with different overrides do not
-    accumulate state. Plans with no rooms return an empty result. Rooms whose
-    polygons are degenerate raise the documented ``ValueError`` from
-    ``room_polygon`` (mapped to HTTP 422 by the API layer).
-    """
+    """Furnish a floor plan without mutating the caller's object."""
     active_catalog = catalog or load_catalog()
     override = room_type_overrides or {}
     plan = floor_plan.model_copy(deep=True)
