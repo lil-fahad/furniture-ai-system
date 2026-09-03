@@ -4,7 +4,7 @@ import argparse
 import hashlib
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from furniture_ai.evaluation.detection import (
@@ -25,7 +25,10 @@ def _sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
 
 def _validate_sha256(value: str) -> str:
     normalized = value.strip().lower()
-    if len(normalized) != 64 or any(character not in "0123456789abcdef" for character in normalized):
+    invalid_character = any(
+        character not in "0123456789abcdef" for character in normalized
+    )
+    if len(normalized) != 64 or invalid_character:
         raise ValueError("model SHA-256 must contain exactly 64 hexadecimal characters")
     return normalized
 
@@ -108,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     payload = {
         "schema_version": "1.0",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "metric": "furnitureai-detection-ap-v1",
         "model": {
             "id": args.model_id,
@@ -123,8 +126,14 @@ def main(argv: list[str] | None = None) -> int:
         },
         "report": asdict(report),
         "limitations": [
-            "This metric is FurnitureAI detection AP v1, not the full Open Images challenge metric.",
-            "Dataset-specific group-of/depiction policy is fixed when the benchmark manifest is built.",
+            (
+                "This metric is FurnitureAI detection AP v1, not the full "
+                "Open Images challenge metric."
+            ),
+            (
+                "Dataset-specific group-of/depiction policy is fixed when the "
+                "benchmark manifest is built."
+            ),
         ],
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
