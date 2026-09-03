@@ -12,7 +12,10 @@ def test_openimages_builder_selects_real_target_schema(tmp_path: Path) -> None:
     boxes = tmp_path / "boxes.csv"
     output = tmp_path / "manifest.json"
 
-    classes.write_text("/m/chair,Chair\n/m/couch,Couch\n/m/table,Table\n/m/lamp,Lamp\n", encoding="utf-8")
+    classes.write_text(
+        "/m/chair,Chair\n/m/couch,Couch\n/m/table,Table\n/m/lamp,Lamp\n",
+        encoding="utf-8",
+    )
     with boxes.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(
@@ -32,9 +35,57 @@ def test_openimages_builder_selects_real_target_schema(tmp_path: Path) -> None:
                 "IsInside",
             ]
         )
-        writer.writerow(["img1", "xclick", "/m/chair", "1", "0.1", "0.4", "0.2", "0.8", "0", "0", "0", "0", "0"])
-        writer.writerow(["img1", "xclick", "/m/table", "1", "0.2", "0.8", "0.5", "0.9", "0", "0", "0", "0", "0"])
-        writer.writerow(["img2", "xclick", "/m/lamp", "1", "0.1", "0.2", "0.1", "0.2", "0", "0", "0", "0", "0"])
+        writer.writerow(
+            [
+                "img1",
+                "xclick",
+                "/m/chair",
+                "1",
+                "0.1",
+                "0.4",
+                "0.2",
+                "0.8",
+                "0",
+                "0",
+                "0",
+                "0",
+                "0",
+            ]
+        )
+        writer.writerow(
+            [
+                "img1",
+                "xclick",
+                "/m/table",
+                "1",
+                "0.2",
+                "0.8",
+                "0.5",
+                "0.9",
+                "0",
+                "0",
+                "0",
+                "0",
+                "0",
+            ]
+        )
+        writer.writerow(
+            [
+                "img2",
+                "xclick",
+                "/m/lamp",
+                "1",
+                "0.1",
+                "0.2",
+                "0.1",
+                "0.2",
+                "0",
+                "0",
+                "0",
+                "0",
+                "0",
+            ]
+        )
 
     subprocess.run(
         [
