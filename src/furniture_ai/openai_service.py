@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import json
 import re
+import time
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
 
@@ -15,6 +17,17 @@ from furniture_ai.contracts import FloorPlanAnalysis
 
 class OpenAIUnavailable(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class OpenAICallTelemetry:
+    operation: str
+    model: str
+    latency_ms: float
+    response_id: str | None
+    input_tokens: int | None
+    output_tokens: int | None
+    total_tokens: int | None
 
 
 def _image_data_url(image: Image.Image) -> str:
@@ -45,6 +58,11 @@ def _json_object(text: str) -> dict[str, object]:
     return value
 
 
+def _usage_value(usage: object | None, name: str) -> int | None:
+    value = getattr(usage, name, None)
+    return value if isinstance(value, int) and value >= 0 else None
+
+
 class OpenAIDesignService:
     def __init__(self, settings: Settings, client: Any | None = None) -> None:
         if not settings.openai_configured:
@@ -62,6 +80,24 @@ class OpenAIDesignService:
             )
         self.client = client
         self.model = settings.openai_model
+        self.last_telemetry: OpenAICallTelemetry | None = None
+
+    def _create_response(self, operation: str, **kwargs: object) -> Any:
+        started = time.perf_counter()
+        response = self.client.responses.create(**kwargs)
+        latency_ms = max((time.perf_counter() - started) * 1000.0, 0.0)
+        usage = getattr(response, "usage", None)
+        response_id = getattr(response, "id", None)
+        self.last_telemetry = OpenAICallTelemetry(
+            operation=operation,
+            model=self.model,
+            latency_ms=latency_ms,
+            response_id=response_id if isinstance(response_id, str) else None,
+            input_tokens=_usage_value(usage, "input_tokens"),
+            output_tokens=_usage_value(usage, "output_tokens"),
+            total_tokens=_usage_value(usage, "total_tokens"),
+        )
+        return response
 
     def refine_room_types(
         self,
@@ -80,7 +116,8 @@ class OpenAIDesignService:
             "ambiguous, lower the confidence rather than inventing detail. Geometric candidates: "
             f"{json.dumps(room_summary)}"
         )
-        response = self.client.responses.create(
+        response = self._create_response(
+            "refine_room_types",
             model=self.model,
             input=[
                 {
@@ -107,8 +144,6 @@ class OpenAIDesignService:
         structured = RoomRefinementResponse.model_validate_json(response.output_text)
         result: dict[str, tuple[str, float]] = {}
         for item in structured.rooms:
-            # Structured Outputs enforces shape and supported labels, but room
-            # identity remains a local trust boundary and must be checked here.
             if item.id not in valid_ids:
                 continue
             result[item.id] = (item.room_type, item.confidence)
@@ -121,5 +156,9 @@ class OpenAIDesignService:
             "Do not claim exact physical dimensions when pixels_per_cm is absent. "
             f"Preferences: {preferences}\nFloor plan JSON: {floor_plan.model_dump_json()}"
         )
-        response = self.client.responses.create(model=self.model, input=prompt)
+        response = self._create_response(
+            "create_design_brief",
+            model=self.model,
+            input=prompt,
+        )
         return response.output_text.strip()

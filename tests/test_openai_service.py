@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from types import SimpleNamespace
 
 import pytest
@@ -15,10 +16,16 @@ class FakeResponses:
     def __init__(self, output_text: str) -> None:
         self.output_text = output_text
         self.calls: list[dict[str, object]] = []
+        self.usage = SimpleNamespace(input_tokens=101, output_tokens=17, total_tokens=118)
+        self.response_id: str | None = "resp_test_123"
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
-        return SimpleNamespace(output_text=self.output_text)
+        return SimpleNamespace(
+            id=self.response_id,
+            output_text=self.output_text,
+            usage=self.usage,
+        )
 
 
 class FakeClient:
@@ -64,6 +71,41 @@ def test_openai_refinement_uses_strict_structured_outputs() -> None:
     assert format_config["name"] == "room_refinements"
     assert format_config["strict"] is True
     assert format_config["schema"]["additionalProperties"] is False
+
+
+def test_openai_telemetry_contains_no_prompt_content() -> None:
+    service, _ = make_service(
+        '{"rooms":[{"id":"room-1","room_type":"office","confidence":0.91}]}'
+    )
+    service.refine_room_types(image(), sample_plan())
+    telemetry = service.last_telemetry
+    assert telemetry is not None
+    assert telemetry.operation == "refine_room_types"
+    assert telemetry.model == service.model
+    assert telemetry.response_id == "resp_test_123"
+    assert telemetry.input_tokens == 101
+    assert telemetry.output_tokens == 17
+    assert telemetry.total_tokens == 118
+    assert telemetry.latency_ms >= 0
+    assert "prompt" not in telemetry.__dict__
+    assert "input" not in telemetry.__dict__
+    with pytest.raises(FrozenInstanceError):
+        telemetry.total_tokens = 0  # type: ignore[misc]
+
+
+def test_openai_telemetry_tolerates_missing_usage_metadata() -> None:
+    service, client = make_service(
+        '{"rooms":[{"id":"room-1","room_type":"office","confidence":0.8}]}'
+    )
+    client.responses.usage = None
+    client.responses.response_id = None
+    service.refine_room_types(image(), sample_plan())
+    telemetry = service.last_telemetry
+    assert telemetry is not None
+    assert telemetry.response_id is None
+    assert telemetry.input_tokens is None
+    assert telemetry.output_tokens is None
+    assert telemetry.total_tokens is None
 
 
 def test_structured_output_rejects_null_or_non_list_rooms() -> None:
@@ -118,6 +160,8 @@ def test_create_design_brief() -> None:
     service, _ = make_service("  A calm, functional layout.  ")
     brief = service.create_design_brief(sample_plan(), "minimalist")
     assert brief == "A calm, functional layout."
+    assert service.last_telemetry is not None
+    assert service.last_telemetry.operation == "create_design_brief"
 
 
 def test_pipeline_treats_malformed_payload_as_service_failure(
