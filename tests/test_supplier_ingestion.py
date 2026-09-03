@@ -28,6 +28,9 @@ def test_authorized_batch_returns_immutable_records() -> None:
     assert len(records) == 1
     assert records[0].supplier_id == "supplier-001"
     assert records[0].provenance.authorization_id == "AUTH-001"
+    assert records[0].provenance.source_sha256 == "a" * 64
+    assert records[0].values["price"] == "1250.00"
+    assert records[0].values["currency"] == "SAR"
     with pytest.raises(TypeError):
         records[0].values["price"] = "0"  # type: ignore[index]
 
