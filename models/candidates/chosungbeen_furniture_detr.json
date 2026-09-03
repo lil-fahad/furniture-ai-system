@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "id": "chosungbeen-furniture-use-data-partial-finetuning",
+  "name": "Furniture DETR partial fine-tuning candidate",
+  "status": "candidate",
+  "production_ready": false,
+  "task": "object-detection",
+  "architecture": "detr-resnet-50",
+  "framework": "transformers",
+  "parameters": 41600000,
+  "source": "https://huggingface.co/chosungbeen/furniture_use_data_partial_finetuning",
+  "base_model": "facebook/detr-resnet-50",
+  "license": "Apache-2.0",
+  "commercial_use": true,
+  "revision": null,
+  "artifact_sha256": null,
+  "artifact_size_bytes": null,
+  "evaluation": {
+    "dataset_id": null,
+    "dataset_revision": null,
+    "split": null,
+    "map": null,
+    "map50": null,
+    "precision": null,
+    "recall": null,
+    "latency_ms_p50": null,
+    "latency_ms_p95": null
+  },
+  "admission": {
+    "download_allowed_for_evaluation": true,
+    "production_gate": "blocked_until_pinned_and_benchmarked",
+    "requirements": [
+      "pin upstream revision",
+      "download model artifact",
+      "compute SHA-256",
+      "record artifact size",
+      "record label mapping",
+      "evaluate on real FurnitureAI benchmark",
+      "compare against current DETR baseline",
+      "run error analysis",
+      "approve only if task metrics justify promotion"
+    ]
+  },
+  "notes": "Metadata sourced from Hugging Face repository inspection. No accuracy claim is made and this candidate must not be used by production inference until artifact pinning and benchmark gates pass."
+}
