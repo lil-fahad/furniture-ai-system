@@ -20,6 +20,8 @@ from furniture_ai.contracts import (
     LayoutValidationRequest,
     Product,
     SceneAnalysis,
+    ValidatedDesignRequest,
+    ValidatedDesignResult,
 )
 from furniture_ai.image_io import ImageValidationError, load_validated_image
 from furniture_ai.layout import furnish_floor_plan, load_catalog
@@ -211,6 +213,32 @@ def validate_layout(request: LayoutValidationRequest) -> LayoutValidationReport:
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post(
+    "/api/v1/design/validated",
+    response_model=ValidatedDesignResult,
+    dependencies=[Depends(require_service_key)],
+    tags=["design"],
+)
+def create_validated_design(request: ValidatedDesignRequest) -> ValidatedDesignResult:
+    """Generate a deterministic layout and immediately gate it through spatial constraints."""
+    try:
+        design = furnish_floor_plan(
+            request.floor_plan,
+            room_type_overrides=request.room_types,
+        )
+        validation = validate_layout_constraints(
+            design.floor_plan,
+            minimum_clearance=request.minimum_clearance,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ValidatedDesignResult(
+        design=design,
+        validation=validation,
+        execution_ready=validation.valid,
+    )
 
 
 @app.get(
