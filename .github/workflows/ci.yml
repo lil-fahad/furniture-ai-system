@@ -28,8 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -78,9 +78,6 @@ jobs:
           print("standalone wheel runtime resources verified")
           PY
           )
-          # setuptools may create a repository-local build/ tree even when the
-          # wheel output itself is written to /tmp. Remove only that generated
-          # artifact so the subsequent repository audit inspects source state.
           rm -rf build
           test ! -e build
       - name: Verify OpenAI secret wiring without disclosure
