@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "id": "chosungbeen-furniture-use-data-partial-finetuning",
+  "name": "Furniture DETR partial fine-tuning candidate",
+  "status": "candidate",
+  "production_ready": false,
+  "task": "object-detection",
+  "architecture": "detr-resnet-50",
+  "framework": "transformers",
+  "parameters": 41502409,
+  "source": "https://huggingface.co/chosungbeen/furniture_use_data_partial_finetuning",
+  "base_model": "facebook/detr-resnet-50",
+  "license": "Apache-2.0",
+  "commercial_use": true,
+  "revision": "379f0882b2a66b50204f83921fe750dc483d0f4c",
+  "artifact_sha256": "292c5f45918c4275d9c0dc6777a2f6fc656e50f87684e2aecd045929accc76b1",
+  "artifact_size_bytes": 166497908,
+  "label_mapping": {
+    "0": "furniture",
+    "1": "Chair",
+    "2": "Sofa",
+    "3": "Table"
+  },
+  "smoke_test": {
+    "environment": "GitHub Actions ubuntu-24.04 / Python 3.12 / CPU",
+    "workflow_run": 8,
+    "latency_ms_p50_cpu": 1264.3310290000045,
+    "latency_samples_ms": [1301.8023820000053, 1257.1033920000048, 1264.3310290000045],
+    "detections_on_blank_image": 0
+  },
+  "evaluation": {
+    "dataset_id": null,
+    "dataset_revision": null,
+    "split": null,
+    "map": null,
+    "map50": null,
+    "precision": null,
+    "recall": null,
+    "latency_ms_p50": null,
+    "latency_ms_p95": null
+  },
+  "admission": {
+    "download_allowed_for_evaluation": true,
+    "production_gate": "blocked_until_benchmarked",
+    "requirements": [
+      "evaluate on real FurnitureAI benchmark",
+      "compare against current DETR baseline",
+      "run error analysis",
+      "approve only if task metrics justify promotion"
+    ]
+  },
+  "notes": "Upstream revision, artifact SHA-256, size, labels, parameter count, and CPU smoke latency were measured in GitHub Actions. No detection-quality claim is made; production remains blocked until a real FurnitureAI benchmark plus baseline comparison pass."
+}
