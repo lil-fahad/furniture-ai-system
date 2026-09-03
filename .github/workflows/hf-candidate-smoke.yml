@@ -40,7 +40,7 @@ jobs:
             "safetensors>=0.4,<1" \
             "huggingface-hub>=0.34,<2" \
             "pillow>=10.3,<13"
-      - name: Download candidate and run CPU inference
+      - name: Download pinned candidate and run CPU inference
         run: |
           python - <<'PY'
           import hashlib
@@ -54,10 +54,15 @@ jobs:
           from PIL import Image
           from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
+          candidate = json.loads(
+              Path("models/candidates/chosungbeen_furniture_detr.json").read_text()
+          )
           repo_id = "chosungbeen/furniture_use_data_partial_finetuning"
+          revision = candidate["revision"]
           model_dir = Path(
               snapshot_download(
                   repo_id=repo_id,
+                  revision=revision,
                   allow_patterns=[
                       "config.json",
                       "preprocessor_config.json",
@@ -66,10 +71,8 @@ jobs:
               )
           )
           resolved_revision = model_dir.name
-          if len(resolved_revision) != 40 or any(
-              character not in "0123456789abcdef" for character in resolved_revision
-          ):
-              raise RuntimeError("Hugging Face snapshot did not resolve to a 40-hex revision")
+          if resolved_revision != revision:
+              raise RuntimeError("Hugging Face snapshot revision does not match pinned revision")
 
           processor = AutoImageProcessor.from_pretrained(model_dir, local_files_only=True)
           model = AutoModelForObjectDetection.from_pretrained(model_dir, local_files_only=True)
@@ -95,6 +98,11 @@ jobs:
           with weight.open("rb") as handle:
               for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                   digest.update(chunk)
+          artifact_sha256 = digest.hexdigest()
+          if artifact_sha256 != candidate["artifact_sha256"]:
+              raise RuntimeError("Downloaded model artifact does not match pinned SHA-256")
+          if weight.stat().st_size != candidate["artifact_size_bytes"]:
+              raise RuntimeError("Downloaded model artifact does not match pinned size")
 
           summary = {
               "repo_id": repo_id,
@@ -102,7 +110,7 @@ jobs:
               "labels": {str(k): v for k, v in model.config.id2label.items()},
               "parameters": sum(p.numel() for p in model.parameters()),
               "artifact_size_bytes": weight.stat().st_size,
-              "artifact_sha256": digest.hexdigest(),
+              "artifact_sha256": artifact_sha256,
               "latency_ms_p50_cpu": statistics.median(latencies),
               "latency_samples_ms": latencies,
               "detections_on_blank_image": int(len(result["scores"])),
@@ -123,9 +131,7 @@ jobs:
           )
           assert candidate["production_ready"] is False
           assert candidate["status"] == "candidate"
-          assert candidate["revision"] is None
-          assert candidate["admission"]["production_gate"] == (
-              "blocked_until_pinned_and_benchmarked"
-          )
+          assert candidate["revision"] == "379f0882b2a66b50204f83921fe750dc483d0f4c"
+          assert candidate["admission"]["production_gate"] == "blocked_until_benchmarked"
           print("candidate production gate remains closed")
           PY
