@@ -4,6 +4,7 @@ from PIL import Image
 
 from furniture_ai.config import Settings
 from furniture_ai.contracts import DesignResult
+from furniture_ai.critic import SpatialDesignCritic
 from furniture_ai.floorplan import FloorPlanAnalyzer
 from furniture_ai.layout import furnish_floor_plan
 from furniture_ai.openai_service import OpenAIDesignService, OpenAIUnavailable
@@ -13,6 +14,7 @@ class DesignPipeline:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.analyzer = FloorPlanAnalyzer()
+        self.critic = SpatialDesignCritic()
 
     def run(
         self,
@@ -35,7 +37,9 @@ class DesignPipeline:
             except (OpenAIUnavailable, ValueError, RuntimeError) as exc:
                 floor_plan.warnings.append(f"OpenAI refinement unavailable: {exc}")
 
-        result = furnish_floor_plan(floor_plan)
+        # Generated geometry crosses an independent deterministic trust boundary
+        # before any optional design brief is requested or returned to callers.
+        result = self.critic.require_valid(furnish_floor_plan(floor_plan))
         if use_openai and preferences and service is not None:
             try:
                 result.design_brief = service.create_design_brief(result.floor_plan, preferences)
