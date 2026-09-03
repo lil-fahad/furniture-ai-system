@@ -1,0 +1,135 @@
+[
+  {
+    "id": "sofa-3-seat",
+    "name": "Three-seat sofa",
+    "category": "sofa",
+    "width_cm": 220,
+    "depth_cm": 95,
+    "room_types": [
+      "living_room"
+    ],
+    "price_sar": null,
+    "source_url": null
+  },
+  {
+    "id": "coffee-table",
+    "name": "Coffee table",
+    "category": "table",
+    "width_cm": 110,
+    "depth_cm": 60,
+    "room_types": [
+      "living_room"
+    ],
+    "price_sar": null,
+    "source_url": null
+  },
+  {
+    "id": "tv-unit",
+    "name": "TV unit",
+    "category": "tv_unit",
+    "width_cm": 180,
+    "depth_cm": 45,
+    "room_types": [
+      "living_room"
+    ],
+    "price_sar": null,
+    "source_url": null
+  },
+  {
+    "id": "queen-bed",
+    "name": "Queen bed",
+    "category": "bed",
+    "width_cm": 160,
+    "depth_cm": 210,
+    "room_types": [
+      "bedroom"
+    ],
+    "price_sar": null,
+    "source_url": null
+  },
+  {
+    "id": "bedside-table",
+    "name": "Bedside table",
+    "category": "table",
+    "width_cm": 50,
+    "depth_cm": 45,
+    "room_types": [
+      "bedroom"
+    ],
+    "price_sar": null,
+    "source_url": null
+  },
+  {
+    "id": "wardrobe",
+    "name": "Wardrobe",
+    "category": "wardrobe",
+    "width_cm": 180,
+    "depth_cm": 60,
+    "room_types": [
+      "bedroom",
+      "storage"
+    ],
+    "price_sar": null,
+    "source_url": null
+  },
+  {
+    "id": "dining-table",
+    "name": "Dining table",
+    "category": "table",
+    "width_cm": 180,
+    "depth_cm": 95,
+    "room_types": [
+      "dining_room"
+    ],
+    "price_sar": null,
+    "source_url": null
+  },
+  {
+    "id": "kitchen-island",
+    "name": "Kitchen island",
+    "category": "cabinet",
+    "width_cm": 160,
+    "depth_cm": 85,
+    "room_types": [
+      "kitchen"
+    ],
+    "price_sar": null,
+    "source_url": null
+  },
+  {
+    "id": "office-desk",
+    "name": "Office desk",
+    "category": "desk",
+    "width_cm": 140,
+    "depth_cm": 70,
+    "room_types": [
+      "office"
+    ],
+    "price_sar": null,
+    "source_url": null
+  },
+  {
+    "id": "office-chair",
+    "name": "Office chair",
+    "category": "chair",
+    "width_cm": 65,
+    "depth_cm": 65,
+    "room_types": [
+      "office"
+    ],
+    "price_sar": null,
+    "source_url": null
+  },
+  {
+    "id": "bathroom-vanity",
+    "name": "Bathroom vanity",
+    "category": "cabinet",
+    "width_cm": 90,
+    "depth_cm": 50,
+    "room_types": [
+      "bathroom"
+    ],
+    "price_sar": null,
+    "source_url": null
+  }
+]

@@ -50,6 +50,15 @@ def get_booking_store() -> BookingStore:
     return BookingStore(get_settings().database_path)
 
 
+def _model_registry(active_settings: Settings) -> ModelRegistry:
+    if active_settings.model_manifest_path.is_file():
+        return ModelRegistry(active_settings.model_manifest_path)
+    return ModelRegistry(
+        active_settings.model_manifest_path,
+        allow_packaged_default=not active_settings.model_manifest_path_overridden,
+    )
+
+
 @app.get("/health", tags=["system"])
 def health() -> dict[str, object]:
     active = get_settings()
@@ -66,7 +75,7 @@ def health() -> dict[str, object]:
 def ready() -> dict[str, object]:
     active = get_settings()
     try:
-        model_statuses = ModelRegistry(active.model_manifest_path).statuses()
+        model_statuses = _model_registry(active).statuses()
         get_booking_store()
     except (OSError, ValueError) as exc:
         raise HTTPException(
@@ -186,7 +195,7 @@ def catalog(room_type: str | None = Query(default=None)) -> list[Product]:
 
 @app.get("/api/v1/models", dependencies=[Depends(require_service_key)], tags=["models"])
 def models(active_settings: Annotated[Settings, Depends(get_settings)]) -> list[dict[str, object]]:
-    registry = ModelRegistry(active_settings.model_manifest_path)
+    registry = _model_registry(active_settings)
     return [status.__dict__ for status in registry.statuses()]
 
 

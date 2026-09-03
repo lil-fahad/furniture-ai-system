@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     model_manifest_path: Path = Path("models/manifest.json")
     professional_models_root: Path = Path("models/professional/installed/pretrained")
 
+    _catalog_path_overridden: bool = PrivateAttr(default=False)
+    _model_manifest_path_overridden: bool = PrivateAttr(default=False)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -59,6 +62,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_security(self) -> Settings:
+        # Capture whether runtime-resource paths were explicitly provided before
+        # anchoring assignments mutate Pydantic's model_fields_set bookkeeping.
+        supplied_fields = set(self.model_fields_set)
+        self._catalog_path_overridden = "catalog_path" in supplied_fields
+        self._model_manifest_path_overridden = "model_manifest_path" in supplied_fields
+
         service_key = self.service_api_key.get_secret_value() if self.service_api_key else ""
         if self.environment == "production" and len(service_key) < 24:
             raise ValueError("SERVICE_API_KEY must contain at least 24 characters in production")
@@ -73,6 +82,14 @@ class Settings(BaseSettings):
         if not self.professional_models_root.is_absolute():
             self.professional_models_root = _anchor(self.professional_models_root)
         return self
+
+    @property
+    def catalog_path_overridden(self) -> bool:
+        return self._catalog_path_overridden
+
+    @property
+    def model_manifest_path_overridden(self) -> bool:
+        return self._model_manifest_path_overridden
 
     @property
     def openai_configured(self) -> bool:
