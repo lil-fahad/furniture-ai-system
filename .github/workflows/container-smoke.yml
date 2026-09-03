@@ -1,0 +1,72 @@
+name: container-smoke
+
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "pyproject.toml"
+      - "src/**"
+      - "data/**"
+      - "models/manifest.json"
+      - ".github/workflows/container-smoke.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  production-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build production image
+        run: docker build --pull --tag furniture-ai:${{ github.sha }} .
+      - name: Verify non-root image user
+        run: |
+          user="$(docker image inspect furniture-ai:${{ github.sha }} --format '{{.Config.User}}')"
+          test -n "$user"
+          test "$user" != "0"
+          test "$user" != "root"
+      - name: Start hardened container
+        run: |
+          docker run --detach --rm \
+            --name furniture-ai-smoke \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --tmpfs /data:rw,noexec,nosuid,size=64m \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --publish 127.0.0.1:18000:8000 \
+            furniture-ai:${{ github.sha }}
+      - name: Verify health and readiness
+        run: |
+          cleanup() { docker logs furniture-ai-smoke || true; docker stop furniture-ai-smoke || true; }
+          trap cleanup EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18000/health >/tmp/health.json; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error http://127.0.0.1:18000/health | python -m json.tool
+          curl --fail --silent --show-error http://127.0.0.1:18000/ready | python -m json.tool
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/health.json').read_text())
+          assert payload['status'] == 'ok'
+          PY
+      - name: Verify runtime privileges
+        run: |
+          docker exec furniture-ai-smoke sh -c 'test "$(id -u)" -ne 0'
+          docker inspect furniture-ai-smoke --format '{{json .HostConfig.CapDrop}}' | grep -q 'ALL'
+          docker inspect furniture-ai-smoke --format '{{json .HostConfig.SecurityOpt}}' | grep -q 'no-new-privileges:true'
+      - name: Stop container
+        if: always()
+        run: docker stop furniture-ai-smoke || true
