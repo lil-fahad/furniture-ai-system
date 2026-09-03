@@ -65,6 +65,12 @@ jobs:
                   ],
               )
           )
+          resolved_revision = model_dir.name
+          if len(resolved_revision) != 40 or any(
+              character not in "0123456789abcdef" for character in resolved_revision
+          ):
+              raise RuntimeError("Hugging Face snapshot did not resolve to a 40-hex revision")
+
           processor = AutoImageProcessor.from_pretrained(model_dir, local_files_only=True)
           model = AutoModelForObjectDetection.from_pretrained(model_dir, local_files_only=True)
           model.eval()
@@ -92,6 +98,7 @@ jobs:
 
           summary = {
               "repo_id": repo_id,
+              "resolved_revision": resolved_revision,
               "labels": {str(k): v for k, v in model.config.id2label.items()},
               "parameters": sum(p.numel() for p in model.parameters()),
               "artifact_size_bytes": weight.stat().st_size,
@@ -116,5 +123,9 @@ jobs:
           )
           assert candidate["production_ready"] is False
           assert candidate["status"] == "candidate"
+          assert candidate["revision"] is None
+          assert candidate["admission"]["production_gate"] == (
+              "blocked_until_pinned_and_benchmarked"
+          )
           print("candidate production gate remains closed")
           PY
