@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 EXPECTED_ARTIFACT_SHA256 = "292c5f45918c4275d9c0dc6777a2f6fc656e50f87684e2aecd045929accc76b1"
 EXPECTED_ARTIFACT_SIZE_BYTES = 166497908
 
