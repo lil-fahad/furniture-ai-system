@@ -13,8 +13,10 @@ def test_packaged_catalog_fallback_is_default_only(tmp_path: Path, monkeypatch) 
     from furniture_ai import config
 
     settings = Settings(environment="test")
+    assert settings.catalog_path_overridden is False
+    # Simulate a standalone install whose default repository-local path is absent.
     settings.catalog_path = tmp_path / "missing-default-catalog.json"
-    assert "catalog_path" not in settings.model_fields_set
+    assert settings.catalog_path_overridden is False
     monkeypatch.setattr(config, "get_settings", lambda: settings)
     load_catalog.cache_clear()
 
@@ -28,12 +30,28 @@ def test_configured_missing_catalog_fails_closed(tmp_path: Path, monkeypatch) ->
 
     missing = tmp_path / "custom-catalog.json"
     settings = Settings(environment="test", catalog_path=missing)
-    assert "catalog_path" in settings.model_fields_set
+    assert settings.catalog_path_overridden is True
     monkeypatch.setattr(config, "get_settings", lambda: settings)
     load_catalog.cache_clear()
 
     with pytest.raises(FileNotFoundError, match="Furniture catalog not found"):
         load_catalog()
+
+
+def test_environment_catalog_override_is_preserved(tmp_path: Path, monkeypatch) -> None:
+    missing = tmp_path / "env-catalog.json"
+    monkeypatch.setenv("CATALOG_PATH", str(missing))
+    settings = Settings(environment="test")
+    assert settings.catalog_path == missing
+    assert settings.catalog_path_overridden is True
+
+
+def test_environment_manifest_override_is_preserved(tmp_path: Path, monkeypatch) -> None:
+    missing = tmp_path / "env-manifest.json"
+    monkeypatch.setenv("MODEL_MANIFEST_PATH", str(missing))
+    settings = Settings(environment="test")
+    assert settings.model_manifest_path == missing
+    assert settings.model_manifest_path_overridden is True
 
 
 def test_explicit_missing_catalog_fails_closed(tmp_path: Path) -> None:
