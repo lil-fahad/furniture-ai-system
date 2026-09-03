@@ -9,11 +9,14 @@ from starlette.concurrency import run_in_threadpool
 
 from furniture_ai import __version__
 from furniture_ai.config import Settings, get_settings
+from furniture_ai.constraints import validate_layout_constraints
 from furniture_ai.contracts import (
     Booking,
     BookingCreate,
     DesignResult,
     LayoutRequest,
+    LayoutValidationReport,
+    LayoutValidationRequest,
     Product,
     SceneAnalysis,
 )
@@ -178,6 +181,23 @@ def layout(request: LayoutRequest) -> DesignResult:
             status_code=422,
             detail=f"Invalid floor-plan geometry: {exc}",
         ) from exc
+
+
+@app.post(
+    "/api/v1/layout/validate",
+    response_model=LayoutValidationReport,
+    dependencies=[Depends(require_service_key)],
+    tags=["design"],
+)
+def validate_layout(request: LayoutValidationRequest) -> LayoutValidationReport:
+    """Validate spatial layout constraints independently from model confidence."""
+    try:
+        return validate_layout_constraints(
+            request.floor_plan,
+            minimum_clearance=request.minimum_clearance,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get(

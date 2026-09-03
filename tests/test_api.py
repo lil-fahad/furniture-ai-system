@@ -24,6 +24,46 @@ def room_bytes() -> bytes:
     return buffer.getvalue()
 
 
+def layout_validation_payload(*, overlap: bool = False) -> dict[str, object]:
+    second_x = 35 if overlap else 70
+    return {
+        "floor_plan": {
+            "source_width": 100,
+            "source_height": 100,
+            "rooms": [
+                {
+                    "id": "room-1",
+                    "room_type": "living_room",
+                    "polygon": [
+                        {"x": 0, "y": 0},
+                        {"x": 100, "y": 0},
+                        {"x": 100, "y": 100},
+                        {"x": 0, "y": 100},
+                    ],
+                    "area": 10_000,
+                    "furniture": [
+                        {
+                            "id": "item-a",
+                            "category": "chair",
+                            "center": {"x": 30, "y": 30},
+                            "width": 20,
+                            "depth": 20,
+                        },
+                        {
+                            "id": "item-b",
+                            "category": "chair",
+                            "center": {"x": second_x, "y": 30},
+                            "width": 20,
+                            "depth": 20,
+                        },
+                    ],
+                }
+            ],
+        },
+        "minimum_clearance": 0,
+    }
+
+
 def test_health_never_exposes_secret(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-a-real-secret-value")
     from furniture_ai.config import get_settings
@@ -110,6 +150,37 @@ def test_analyze_and_catalog_work_from_neutral_cwd(tmp_path, monkeypatch) -> Non
     )
     assert response.status_code == 200, response.text
     assert response.json()["floor_plan"]["rooms"]
+
+
+def test_layout_validation_endpoint_accepts_valid_layout() -> None:
+    response = TestClient(app).post(
+        "/api/v1/layout/validate",
+        json=layout_validation_payload(),
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["valid"] is True
+    assert payload["checked_rooms"] == 1
+    assert payload["checked_items"] == 2
+    assert payload["issues"] == []
+
+
+def test_layout_validation_endpoint_reports_collision() -> None:
+    response = TestClient(app).post(
+        "/api/v1/layout/validate",
+        json=layout_validation_payload(overlap=True),
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["valid"] is False
+    assert any(issue["code"] == "collision" for issue in payload["issues"])
+
+
+def test_layout_validation_endpoint_rejects_negative_clearance() -> None:
+    request = layout_validation_payload()
+    request["minimum_clearance"] = -1
+    response = TestClient(app).post("/api/v1/layout/validate", json=request)
+    assert response.status_code == 422
 
 
 def test_catalog_and_booking() -> None:
