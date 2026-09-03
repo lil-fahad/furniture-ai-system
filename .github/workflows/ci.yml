@@ -54,7 +54,7 @@ jobs:
       - name: Smoke-test standalone wheel resources
         if: ${{ matrix.python-version == '3.12' }}
         run: |
-          rm -rf /tmp/furniture-wheel /tmp/furniture-wheel-target
+          rm -rf /tmp/furniture-wheel /tmp/furniture-wheel-target build
           mkdir -p /tmp/furniture-wheel /tmp/furniture-wheel-target
           python -m pip wheel --no-deps --wheel-dir /tmp/furniture-wheel .
           python -m pip install --no-deps \
@@ -78,6 +78,11 @@ jobs:
           print("standalone wheel runtime resources verified")
           PY
           )
+          # setuptools may create a repository-local build/ tree even when the
+          # wheel output itself is written to /tmp. Remove only that generated
+          # artifact so the subsequent repository audit inspects source state.
+          rm -rf build
+          test ! -e build
       - name: Verify OpenAI secret wiring without disclosure
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
