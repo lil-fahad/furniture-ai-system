@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from types import SimpleNamespace
 
 import pytest
@@ -88,6 +89,8 @@ def test_openai_telemetry_contains_no_prompt_content() -> None:
     assert telemetry.latency_ms >= 0
     assert "prompt" not in telemetry.__dict__
     assert "input" not in telemetry.__dict__
+    with pytest.raises(FrozenInstanceError):
+        telemetry.total_tokens = 0  # type: ignore[misc]
 
 
 def test_openai_telemetry_tolerates_missing_usage_metadata() -> None:
