@@ -17,7 +17,8 @@ def test_candidate_metadata_is_blocked_from_production() -> None:
     assert payload["artifact_sha256"] == EXPECTED_ARTIFACT_SHA256
     assert payload["artifact_size_bytes"] == EXPECTED_ARTIFACT_SIZE_BYTES
     assert payload["evaluation"]["map"] is None
-    assert payload["admission"]["production_gate"] == "blocked_until_benchmarked"
+    assert payload["revision"] is None
+    assert payload["admission"]["production_gate"] == "blocked_until_pinned_and_benchmarked"
 
 
 def test_candidate_source_and_base_model_are_explicit() -> None:
