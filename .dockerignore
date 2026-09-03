@@ -1,4 +1,14 @@
 **
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!README.md
+!src
+!src/**
+!data
+!data/**
+!models
+!models/manifest.json
 !cloud
 !cloud/**
 !training

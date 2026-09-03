@@ -1,0 +1,81 @@
+name: container-smoke
+
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "pyproject.toml"
+      - "src/**"
+      - "data/**"
+      - "models/manifest.json"
+      - ".github/workflows/container-smoke.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  production-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Build production image
+        run: docker build --pull --tag furniture-ai:${{ github.sha }} .
+      - name: Verify non-root image user
+        run: |
+          user="$(docker image inspect furniture-ai:${{ github.sha }} --format '{{.Config.User}}')"
+          test -n "$user"
+          test "$user" != "0"
+          test "$user" != "root"
+      - name: Start hardened container
+        run: |
+          service_key="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          docker run --detach --rm \
+            --name furniture-ai-smoke \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m,mode=1777 \
+            --tmpfs /data:rw,noexec,nosuid,size=64m,mode=1777 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --env ENVIRONMENT=production \
+            --env SERVICE_API_KEY="$service_key" \
+            --publish 127.0.0.1:18000:8000 \
+            furniture-ai:${{ github.sha }}
+      - name: Verify production health, readiness, and auth gate
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18000/health >/tmp/health.json; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error http://127.0.0.1:18000/health | python -m json.tool
+          curl --fail --silent --show-error http://127.0.0.1:18000/ready | python -m json.tool
+          status="$(curl --silent --output /tmp/unauthorized.json --write-out '%{http_code}' \
+            http://127.0.0.1:18000/api/v1/catalog)"
+          test "$status" = "401"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/health.json').read_text())
+          assert payload['status'] == 'ok'
+          assert payload['service_auth_enabled'] is True
+          unauthorized = json.loads(Path('/tmp/unauthorized.json').read_text())
+          assert unauthorized['detail'] == 'Invalid API key'
+          PY
+      - name: Verify runtime privileges
+        run: |
+          docker exec furniture-ai-smoke sh -c 'test "$(id -u)" -ne 0'
+          docker inspect furniture-ai-smoke --format '{{json .HostConfig.CapDrop}}' | grep -q 'ALL'
+          docker inspect furniture-ai-smoke --format '{{json .HostConfig.SecurityOpt}}' | grep -q 'no-new-privileges:true'
+      - name: Capture logs and stop container
+        if: always()
+        run: |
+          docker logs furniture-ai-smoke || true
+          docker stop furniture-ai-smoke || true
