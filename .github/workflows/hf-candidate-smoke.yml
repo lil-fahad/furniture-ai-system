@@ -1,0 +1,127 @@
+name: hf-candidate-smoke
+
+on:
+  pull_request:
+    paths:
+      - "models/candidates/**"
+      - "scripts/evaluate_hf_furniture_detector.py"
+      - ".github/workflows/hf-candidate-smoke.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hf-candidate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  furniture-detr-cpu-smoke:
+    if: ${{ github.head_ref == 'feat/hf-candidate-current-main-2026-09' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HF_HOME: /tmp/hf-cache
+      TRANSFORMERS_CACHE: /tmp/hf-cache/transformers
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install candidate runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "torch>=2.2" \
+            "torchvision>=0.17" \
+            "timm>=1.0,<2" \
+            "transformers>=4.57,<6" \
+            "safetensors>=0.4,<1" \
+            "huggingface-hub>=0.34,<2" \
+            "pillow>=10.3,<13"
+      - name: Download pinned candidate and run CPU inference
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import statistics
+          import time
+          from pathlib import Path
+
+          import torch
+          from huggingface_hub import snapshot_download
+          from PIL import Image
+          from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
+          candidate = json.loads(
+              Path("models/candidates/chosungbeen_furniture_detr.json").read_text()
+          )
+          repo_id = "chosungbeen/furniture_use_data_partial_finetuning"
+          revision = candidate["revision"]
+          model_dir = Path(
+              snapshot_download(
+                  repo_id=repo_id,
+                  revision=revision,
+                  allow_patterns=[
+                      "config.json",
+                      "preprocessor_config.json",
+                      "model.safetensors",
+                  ],
+              )
+          )
+          if model_dir.name != revision:
+              raise RuntimeError("Hugging Face snapshot revision does not match pinned revision")
+          processor = AutoImageProcessor.from_pretrained(model_dir, local_files_only=True)
+          model = AutoModelForObjectDetection.from_pretrained(model_dir, local_files_only=True)
+          model.eval()
+          image = Image.new("RGB", (640, 480), "white")
+          inputs = processor(images=image, return_tensors="pt")
+          latencies = []
+          with torch.inference_mode():
+              for _ in range(3):
+                  started = time.perf_counter()
+                  outputs = model(**inputs)
+                  latencies.append((time.perf_counter() - started) * 1000)
+          result = processor.post_process_object_detection(
+              outputs,
+              threshold=0.5,
+              target_sizes=[(image.height, image.width)],
+          )[0]
+          weight = model_dir / "model.safetensors"
+          digest = hashlib.sha256()
+          with weight.open("rb") as handle:
+              for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                  digest.update(chunk)
+          artifact_sha256 = digest.hexdigest()
+          if artifact_sha256 != candidate["artifact_sha256"]:
+              raise RuntimeError("Downloaded model artifact does not match pinned SHA-256")
+          if weight.stat().st_size != candidate["artifact_size_bytes"]:
+              raise RuntimeError("Downloaded model artifact does not match pinned size")
+          summary = {
+              "repo_id": repo_id,
+              "resolved_revision": model_dir.name,
+              "labels": {str(k): v for k, v in model.config.id2label.items()},
+              "parameters": sum(p.numel() for p in model.parameters()),
+              "artifact_size_bytes": weight.stat().st_size,
+              "artifact_sha256": artifact_sha256,
+              "latency_ms_p50_cpu": statistics.median(latencies),
+              "latency_samples_ms": latencies,
+              "detections_on_blank_image": int(len(result["scores"])),
+          }
+          print(json.dumps(summary, indent=2))
+          PY
+      - name: Verify candidate remains evaluation-only
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          candidate = json.loads(
+              Path("models/candidates/chosungbeen_furniture_detr.json").read_text()
+          )
+          assert candidate["production_ready"] is False
+          assert candidate["status"] == "candidate"
+          assert candidate["admission"]["production_gate"] == "blocked_until_benchmarked"
+          print("candidate production gate remains closed")
+          PY
