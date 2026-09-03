@@ -28,3 +28,16 @@ def test_api_generates_request_id_when_missing() -> None:
     response = TestClient(app).get("/health")
     assert response.status_code == 200
     assert re.fullmatch(r"[0-9a-f]{32}", response.headers["X-Request-ID"])
+
+
+def test_cors_preflight_allows_request_id_header() -> None:
+    response = TestClient(app).options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-Request-ID",
+        },
+    )
+    assert response.status_code == 200
+    assert "x-request-id" in response.headers["access-control-allow-headers"].lower()
