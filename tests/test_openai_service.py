@@ -16,11 +16,12 @@ class FakeResponses:
         self.output_text = output_text
         self.calls: list[dict[str, object]] = []
         self.usage = SimpleNamespace(input_tokens=101, output_tokens=17, total_tokens=118)
+        self.response_id: str | None = "resp_test_123"
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
         return SimpleNamespace(
-            id="resp_test_123",
+            id=self.response_id,
             output_text=self.output_text,
             usage=self.usage,
         )
@@ -87,6 +88,21 @@ def test_openai_telemetry_contains_no_prompt_content() -> None:
     assert telemetry.latency_ms >= 0
     assert "prompt" not in telemetry.__dict__
     assert "input" not in telemetry.__dict__
+
+
+def test_openai_telemetry_tolerates_missing_usage_metadata() -> None:
+    service, client = make_service(
+        '{"rooms":[{"id":"room-1","room_type":"office","confidence":0.8}]}'
+    )
+    client.responses.usage = None
+    client.responses.response_id = None
+    service.refine_room_types(image(), sample_plan())
+    telemetry = service.last_telemetry
+    assert telemetry is not None
+    assert telemetry.response_id is None
+    assert telemetry.input_tokens is None
+    assert telemetry.output_tokens is None
+    assert telemetry.total_tokens is None
 
 
 def test_structured_output_rejects_null_or_non_list_rooms() -> None:
