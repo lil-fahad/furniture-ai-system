@@ -70,9 +70,7 @@ jobs:
           catalog = load_catalog()
           registry = ModelRegistry(
               settings.model_manifest_path,
-              allow_packaged_default=(
-                  "model_manifest_path" not in settings.model_fields_set
-              ),
+              allow_packaged_default=not settings.model_manifest_path_overridden,
           )
           statuses = registry.statuses()
           assert catalog and catalog[0].id == "sofa-3-seat"
