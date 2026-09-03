@@ -67,7 +67,7 @@ jobs:
           assert payload['status'] == 'ok'
           assert payload['service_auth_enabled'] is True
           unauthorized = json.loads(Path('/tmp/unauthorized.json').read_text())
-          assert unauthorized['detail'] == 'Invalid or missing service API key'
+          assert unauthorized['detail'] == 'Invalid API key'
           PY
       - name: Verify runtime privileges
         run: |
