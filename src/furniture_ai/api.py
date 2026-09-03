@@ -20,6 +20,7 @@ from furniture_ai.contracts import (
     Product,
     SceneAnalysis,
 )
+from furniture_ai.critic import DesignCriticRejected, SpatialDesignCritic
 from furniture_ai.image_io import ImageValidationError, load_validated_image
 from furniture_ai.layout import furnish_floor_plan, load_catalog
 from furniture_ai.models import ModelRegistry
@@ -59,6 +60,13 @@ def _model_registry(active_settings: Settings) -> ModelRegistry:
     return ModelRegistry(
         active_settings.model_manifest_path,
         allow_packaged_default=not active_settings.model_manifest_path_overridden,
+    )
+
+
+def _generated_layout_rejected(exc: DesignCriticRejected) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail="Generated layout failed deterministic spatial validation",
     )
 
 
@@ -118,13 +126,16 @@ async def analyze_and_design(
     except ImageValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     pipeline = DesignPipeline(active_settings)
-    return await run_in_threadpool(
-        pipeline.run,
-        loaded,
-        pixels_per_cm=pixels_per_cm,
-        use_openai=use_openai,
-        preferences=preferences,
-    )
+    try:
+        return await run_in_threadpool(
+            pipeline.run,
+            loaded,
+            pixels_per_cm=pixels_per_cm,
+            use_openai=use_openai,
+            preferences=preferences,
+        )
+    except DesignCriticRejected as exc:
+        raise _generated_layout_rejected(exc) from exc
 
 
 @app.post(
@@ -175,7 +186,10 @@ async def analyze_room_scene(
 )
 def layout(request: LayoutRequest) -> DesignResult:
     try:
-        return furnish_floor_plan(request.floor_plan, room_type_overrides=request.room_types)
+        result = furnish_floor_plan(request.floor_plan, room_type_overrides=request.room_types)
+        return SpatialDesignCritic().require_valid(result)
+    except DesignCriticRejected as exc:
+        raise _generated_layout_rejected(exc) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=422,
