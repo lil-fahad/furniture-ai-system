@@ -144,6 +144,38 @@ class LayoutRequest(BaseModel):
     room_types: dict[str, str] = Field(default_factory=dict)
 
 
+class ConstraintSeverity(StrEnum):
+    ERROR = "error"
+    WARNING = "warning"
+
+
+class ConstraintIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(min_length=1, max_length=80)
+    severity: ConstraintSeverity
+    message: str = Field(min_length=1, max_length=500)
+    room_id: str
+    item_ids: list[str] = Field(default_factory=list)
+    opening_id: str | None = None
+
+
+class LayoutValidationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    floor_plan: FloorPlanAnalysis
+    minimum_clearance: NonNegativeFloat = Field(
+        default=0,
+        description="Optional minimum separation in the floor-plan geometry coordinate units.",
+    )
+
+
+class LayoutValidationReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    valid: bool
+    checked_rooms: int = Field(ge=0)
+    checked_items: int = Field(ge=0)
+    issues: list[ConstraintIssue] = Field(default_factory=list)
+
+
 class DesignResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     floor_plan: FloorPlanAnalysis
