@@ -115,7 +115,10 @@ def main() -> None:
         "label_mapping": {str(key): value for key, value in model.config.id2label.items()},
         "artifacts": artifacts,
         "predictions": predictions,
-        "note": "Detection-quality metrics require ground-truth boxes/labels and are intentionally not fabricated by this smoke evaluator.",
+        "note": (
+            "Detection-quality metrics require ground-truth boxes/labels and are intentionally "
+            "not fabricated by this smoke evaluator."
+        ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(summary, indent=2), encoding="utf-8")
