@@ -34,13 +34,16 @@ jobs:
           test "$user" != "root"
       - name: Start hardened container
         run: |
+          service_key="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
           docker run --detach --rm \
             --name furniture-ai-smoke \
             --read-only \
-            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
-            --tmpfs /data:rw,noexec,nosuid,size=64m \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m,mode=1777 \
+            --tmpfs /data:rw,noexec,nosuid,size=64m,mode=1777 \
             --cap-drop ALL \
             --security-opt no-new-privileges:true \
+            --env ENVIRONMENT=production \
+            --env SERVICE_API_KEY="$service_key" \
             --publish 127.0.0.1:18000:8000 \
             furniture-ai:${{ github.sha }}
       - name: Verify health and readiness
@@ -61,6 +64,7 @@ jobs:
 
           payload = json.loads(Path('/tmp/health.json').read_text())
           assert payload['status'] == 'ok'
+          assert payload['service_auth_enabled'] is True
           PY
       - name: Verify runtime privileges
         run: |
