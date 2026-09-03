@@ -5,7 +5,7 @@ import hashlib
 import json
 from collections import Counter
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from furniture_ai.evaluation.detection import GroundTruthRecord, NormalizedBox
@@ -145,7 +145,7 @@ def build_openimages_furniture_ground_truth(
         source_file=source.name,
         source_url=source_url,
         source_sha256=source_hash,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
         policy=active_policy,
         records=len(records),
         images=len(images),
