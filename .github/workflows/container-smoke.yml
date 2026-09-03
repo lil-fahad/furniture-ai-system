@@ -46,7 +46,7 @@ jobs:
             --env SERVICE_API_KEY="$service_key" \
             --publish 127.0.0.1:18000:8000 \
             furniture-ai:${{ github.sha }}
-      - name: Verify health and readiness
+      - name: Verify production health, readiness, and auth gate
         run: |
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error http://127.0.0.1:18000/health >/tmp/health.json; then
@@ -56,6 +56,9 @@ jobs:
           done
           curl --fail --silent --show-error http://127.0.0.1:18000/health | python -m json.tool
           curl --fail --silent --show-error http://127.0.0.1:18000/ready | python -m json.tool
+          status="$(curl --silent --output /tmp/unauthorized.json --write-out '%{http_code}' \
+            http://127.0.0.1:18000/api/v1/catalog)"
+          test "$status" = "401"
           python - <<'PY'
           import json
           from pathlib import Path
@@ -63,6 +66,8 @@ jobs:
           payload = json.loads(Path('/tmp/health.json').read_text())
           assert payload['status'] == 'ok'
           assert payload['service_auth_enabled'] is True
+          unauthorized = json.loads(Path('/tmp/unauthorized.json').read_text())
+          assert unauthorized['detail'] == 'Invalid or missing service API key'
           PY
       - name: Verify runtime privileges
         run: |
