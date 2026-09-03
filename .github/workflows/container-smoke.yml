@@ -48,8 +48,6 @@ jobs:
             furniture-ai:${{ github.sha }}
       - name: Verify health and readiness
         run: |
-          cleanup() { docker logs furniture-ai-smoke || true; docker stop furniture-ai-smoke || true; }
-          trap cleanup EXIT
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error http://127.0.0.1:18000/health >/tmp/health.json; then
               break
@@ -71,6 +69,8 @@ jobs:
           docker exec furniture-ai-smoke sh -c 'test "$(id -u)" -ne 0'
           docker inspect furniture-ai-smoke --format '{{json .HostConfig.CapDrop}}' | grep -q 'ALL'
           docker inspect furniture-ai-smoke --format '{{json .HostConfig.SecurityOpt}}' | grep -q 'no-new-privileges:true'
-      - name: Stop container
+      - name: Capture logs and stop container
         if: always()
-        run: docker stop furniture-ai-smoke || true
+        run: |
+          docker logs furniture-ai-smoke || true
+          docker stop furniture-ai-smoke || true
