@@ -34,7 +34,7 @@ def test_cors_preflight_allows_request_id_header() -> None:
     response = TestClient(app).options(
         "/health",
         headers={
-            "Origin": "http://localhost:3000",
+            "Origin": "http://localhost:8501",
             "Access-Control-Request-Method": "GET",
             "Access-Control-Request-Headers": "X-Request-ID",
         },
