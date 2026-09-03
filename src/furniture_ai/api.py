@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import time
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
@@ -23,6 +24,7 @@ from furniture_ai.contracts import (
 from furniture_ai.image_io import ImageValidationError, load_validated_image
 from furniture_ai.layout import furnish_floor_plan, load_catalog
 from furniture_ai.models import ModelRegistry
+from furniture_ai.observability import elapsed_ms, normalize_request_id
 from furniture_ai.pipeline import DesignPipeline
 from furniture_ai.professional_vision import (
     ProfessionalVisionService,
@@ -44,8 +46,19 @@ app.add_middleware(
     allow_origins=get_settings().allowed_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "X-API-Key"],
+    allow_headers=["Content-Type", "X-API-Key", "X-Request-ID"],
 )
+
+
+@app.middleware("http")
+async def request_observability(request: Request, call_next):
+    request_id = normalize_request_id(request.headers.get("X-Request-ID"))
+    request.state.request_id = request_id
+    started = time.perf_counter()
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["Server-Timing"] = f"app;dur={elapsed_ms(started):.2f}"
+    return response
 
 
 @lru_cache(maxsize=1)
