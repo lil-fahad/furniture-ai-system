@@ -55,7 +55,7 @@ def _model_registry(active_settings: Settings) -> ModelRegistry:
         return ModelRegistry(active_settings.model_manifest_path)
     return ModelRegistry(
         active_settings.model_manifest_path,
-        allow_packaged_default="model_manifest_path" not in active_settings.model_fields_set,
+        allow_packaged_default=not active_settings.model_manifest_path_overridden,
     )
 
 
