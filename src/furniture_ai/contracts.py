@@ -184,6 +184,23 @@ class DesignResult(BaseModel):
     design_brief: str | None = None
 
 
+class ValidatedDesignRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    floor_plan: FloorPlanAnalysis
+    room_types: dict[str, str] = Field(default_factory=dict)
+    minimum_clearance: NonNegativeFloat = Field(
+        default=0,
+        description="Explicit minimum separation in floor-plan geometry coordinate units.",
+    )
+
+
+class ValidatedDesignResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    design: DesignResult
+    validation: LayoutValidationReport
+    execution_ready: bool
+
+
 class Product(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
