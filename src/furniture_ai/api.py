@@ -169,7 +169,17 @@ async def analyze_room_scene(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
-        service = ProfessionalVisionService(active_settings.professional_models_root)
+        configured_device = (
+            None
+            if active_settings.professional_vision_device == "auto"
+            else active_settings.professional_vision_device
+        )
+        service = ProfessionalVisionService(
+            active_settings.professional_models_root,
+            device=configured_device,
+            precision=active_settings.professional_vision_precision,
+            enable_torch_compile=active_settings.professional_vision_torch_compile,
+        )
         return await run_in_threadpool(
             service.analyze,
             loaded,
