@@ -17,6 +17,7 @@ from furniture_ai.contracts import (
     Point,
     Product,
 )
+from furniture_ai.geometry import room_polygon_from_coordinates
 
 WALL_CATEGORIES = {"sofa", "bed", "wardrobe", "tv_unit", "desk", "cabinet"}
 PlacementPolicyName = Literal["balanced", "wall_first", "fit_first"]
@@ -58,15 +59,8 @@ def load_catalog(path: str | Path | None = None) -> list[Product]:
 
 
 def room_polygon(points: list[Point]) -> Polygon:
-    """Build a valid Shapely polygon from room boundary points."""
-    if len(points) < 3:
-        raise ValueError("Room polygon requires at least three points")
-    polygon = Polygon([(point.x, point.y) for point in points]).buffer(0)
-    if polygon.is_empty or not isinstance(polygon, Polygon):
-        raise ValueError("Room polygon is invalid: self-intersecting or collapsed geometry")
-    if polygon.area <= 0:
-        raise ValueError("Room polygon is degenerate: zero-area (collinear points)")
-    return polygon
+    """Build the canonical strict room polygon used by all layout paths."""
+    return room_polygon_from_coordinates((point.x, point.y) for point in points)
 
 
 def rectangle(cx: float, cy: float, width: float, depth: float, angle: float) -> Polygon:
