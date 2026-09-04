@@ -7,6 +7,12 @@ import statistics
 import time
 from pathlib import Path
 
+from furniture_ai.nvidia_acceleration import (
+    inference_context,
+    prepare_model,
+    resolve_nvidia_runtime,
+)
+
 
 def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
     digest = hashlib.sha256()
@@ -23,7 +29,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-dir", type=Path, required=True)
     parser.add_argument("--benchmark", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--precision", choices=("auto", "fp32", "fp16", "bf16"), default="auto")
+    parser.add_argument("--torch-compile", action="store_true")
     parser.add_argument("--threshold", type=float, default=0.5)
     return parser.parse_args()
 
@@ -47,18 +55,18 @@ def main() -> None:
     if not args.benchmark.is_file():
         raise FileNotFoundError(args.benchmark)
 
+    import torch
     from PIL import Image
     from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
+    runtime = resolve_nvidia_runtime(
+        args.device,
+        precision=args.precision,
+        enable_torch_compile=args.torch_compile,
+    )
     processor = AutoImageProcessor.from_pretrained(args.model_dir, local_files_only=True)
     model = AutoModelForObjectDetection.from_pretrained(args.model_dir, local_files_only=True)
-    if args.device == "cuda":
-        import torch
-
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA requested but unavailable")
-        model = model.to("cuda")
-    model.eval()
+    model = prepare_model(model, runtime)
 
     rows = load_manifest(args.benchmark)
     latencies: list[float] = []
@@ -66,13 +74,21 @@ def main() -> None:
 
     for row in rows:
         image_path = Path(str(row["image"]))
-        image = Image.open(image_path).convert("RGB")
+        with Image.open(image_path) as opened:
+            image = opened.convert("RGB")
         inputs = processor(images=image, return_tensors="pt")
-        if args.device == "cuda":
-            inputs = {key: value.to("cuda") for key, value in inputs.items()}
+        inputs = {
+            key: value.to(runtime.device) if hasattr(value, "to") else value
+            for key, value in inputs.items()
+        }
 
+        if runtime.device.startswith("cuda"):
+            torch.cuda.synchronize()
         start = time.perf_counter()
-        outputs = model(**inputs)
+        with inference_context(runtime):
+            outputs = model(**inputs)
+        if runtime.device.startswith("cuda"):
+            torch.cuda.synchronize()
         latency_ms = (time.perf_counter() - start) * 1000
         latencies.append(latency_ms)
         result = processor.post_process_object_detection(
@@ -98,7 +114,7 @@ def main() -> None:
         "benchmark": str(args.benchmark),
         "images": len(rows),
         "threshold": args.threshold,
-        "device": args.device,
+        "runtime": runtime.as_public_dict(),
         "latency_ms_p50": statistics.median(latencies) if latencies else None,
         "latency_ms_p95": (
             statistics.quantiles(latencies, n=20, method="inclusive")[18]
