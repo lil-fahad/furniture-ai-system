@@ -16,6 +16,7 @@ from furniture_ai.portfolio import (
     DesignPortfolioRequest,
     DesignPortfolioResult,
 )
+from furniture_ai.rendering import RenderPreviewRequest, RenderPreviewResult, RenderingService
 from furniture_ai.security import require_service_key
 
 router = APIRouter(
@@ -38,6 +39,9 @@ def capabilities() -> dict[str, object]:
         "deterministic_validation": True,
         "placement_policies": ["balanced", "wall_first", "fit_first"],
         "ranking_is_confidence": False,
+        "rendering_preview": True,
+        "render_backends": ["mock"],
+        "photorealistic_backends": [],
     }
 
 
@@ -120,5 +124,14 @@ async def analyze_floor_plan(
 def design_portfolio(request: DesignPortfolioRequest) -> DesignPortfolioResult:
     try:
         return DesignPortfolioEngine().compose(request)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/render/preview", response_model=RenderPreviewResult)
+def render_preview(request: RenderPreviewRequest) -> RenderPreviewResult:
+    """Compile a grounded scene and render it through the selected preview backend."""
+    try:
+        return RenderingService().preview(request)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
