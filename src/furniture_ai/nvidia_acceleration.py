@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass
-from typing import Any, Iterator, Literal
+from typing import Any, Literal
 
 Precision = Literal["auto", "fp32", "fp16", "bf16"]
 
@@ -30,7 +31,9 @@ def _torch() -> Any:
     try:
         import torch
     except ImportError as exc:
-        raise NvidiaAccelerationUnavailable("PyTorch is required for accelerated inference") from exc
+        raise NvidiaAccelerationUnavailable(
+            "PyTorch is required for accelerated inference"
+        ) from exc
     return torch
 
 
@@ -44,7 +47,9 @@ def resolve_nvidia_runtime(
     cuda_available = bool(torch.cuda.is_available())
 
     if requested_device and requested_device.startswith("cuda") and not cuda_available:
-        raise NvidiaAccelerationUnavailable("CUDA was requested but no NVIDIA CUDA device is available")
+        raise NvidiaAccelerationUnavailable(
+            "CUDA was requested but no NVIDIA CUDA device is available"
+        )
 
     device = requested_device or ("cuda" if cuda_available else "cpu")
     if not device.startswith("cuda"):
@@ -80,7 +85,9 @@ def resolve_nvidia_runtime(
         resolved_precision = precision
 
     if resolved_precision == "bf16" and not bf16_supported:
-        raise NvidiaAccelerationUnavailable("BF16 was requested but is unsupported by this CUDA device")
+        raise NvidiaAccelerationUnavailable(
+            "BF16 was requested but is unsupported by this CUDA device"
+        )
 
     return NvidiaRuntimeProfile(
         device=device,
@@ -109,7 +116,9 @@ def prepare_model(model: Any, profile: NvidiaRuntimeProfile) -> Any:
     if profile.torch_compile_enabled:
         compile_fn = getattr(torch, "compile", None)
         if compile_fn is None:
-            raise NvidiaAccelerationUnavailable("torch.compile is unavailable in this PyTorch build")
+            raise NvidiaAccelerationUnavailable(
+                "torch.compile is unavailable in this PyTorch build"
+            )
         model = compile_fn(model, mode="reduce-overhead", fullgraph=False)
     return model
 
