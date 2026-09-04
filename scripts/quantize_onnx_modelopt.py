@@ -122,7 +122,11 @@ def run_quantization(
     source = Path(onnx)
     calibration = Path(calibration_data)
     destination = Path(output)
-    manifest_path = Path(manifest) if manifest else destination.with_suffix(destination.suffix + ".json")
+    manifest_path = (
+        Path(manifest)
+        if manifest
+        else destination.with_suffix(destination.suffix + ".json")
+    )
     if not source.is_file():
         raise FileNotFoundError(source)
     if source.stat().st_size == 0:
