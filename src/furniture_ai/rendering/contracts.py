@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from furniture_ai.contracts import DesignResult, Point, Unit
+from furniture_ai.contracts import DesignResult, OpeningKind, Point, Unit
 
 
 class RendererKind(StrEnum):
@@ -18,6 +18,16 @@ class CameraSpec(BaseModel):
     preset: Literal["wide_room", "eye_level", "corner"] = "wide_room"
     lens_mm: float = Field(default=24.0, ge=14.0, le=120.0)
     height_cm: float = Field(default=150.0, ge=40.0, le=300.0)
+
+
+class SceneOpening(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=160)
+    kind: OpeningKind
+    start: Point
+    end: Point
+    confidence: float | None = Field(default=None, ge=0, le=1)
 
 
 class SceneFurnitureItem(BaseModel):
@@ -57,6 +67,7 @@ class SceneSpec(BaseModel):
     style: str = Field(min_length=1, max_length=120)
     camera: CameraSpec = Field(default_factory=CameraSpec)
     rooms: list[SceneRoom] = Field(min_length=1)
+    openings: list[SceneOpening] = Field(default_factory=list)
     negative_constraints: list[str] = Field(default_factory=list)
 
 
