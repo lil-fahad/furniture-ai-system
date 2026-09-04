@@ -26,15 +26,20 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Build production image
         run: docker build --pull --tag furniture-ai:${{ github.sha }} .
-      - name: Verify non-root image user
+      - name: Verify image metadata and non-root user
         run: |
           user="$(docker image inspect furniture-ai:${{ github.sha }} --format '{{.Config.User}}')"
+          version="$(docker image inspect furniture-ai:${{ github.sha }} \
+            --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')"
           test -n "$user"
           test "$user" != "0"
           test "$user" != "root"
+          test "$version" = "1.4.0"
       - name: Start hardened container
         run: |
           service_key="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          echo "::add-mask::$service_key"
+          printf 'SMOKE_SERVICE_KEY=%s\n' "$service_key" >> "$GITHUB_ENV"
           docker run --detach --rm \
             --name furniture-ai-smoke \
             --read-only \
@@ -46,7 +51,7 @@ jobs:
             --env SERVICE_API_KEY="$service_key" \
             --publish 127.0.0.1:18000:8000 \
             furniture-ai:${{ github.sha }}
-      - name: Verify production health, readiness, and auth gate
+      - name: Verify production v1 and v2 contracts
         run: |
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error http://127.0.0.1:18000/health >/tmp/health.json; then
@@ -56,18 +61,42 @@ jobs:
           done
           curl --fail --silent --show-error http://127.0.0.1:18000/health | python -m json.tool
           curl --fail --silent --show-error http://127.0.0.1:18000/ready | python -m json.tool
-          status="$(curl --silent --output /tmp/unauthorized.json --write-out '%{http_code}' \
+
+          v1_status="$(curl --silent --output /tmp/v1-unauthorized.json --write-out '%{http_code}' \
             http://127.0.0.1:18000/api/v1/catalog)"
-          test "$status" = "401"
+          test "$v1_status" = "401"
+
+          v2_status="$(curl --silent --output /tmp/v2-unauthorized.json --write-out '%{http_code}' \
+            http://127.0.0.1:18000/api/v2/capabilities)"
+          test "$v2_status" = "401"
+
+          curl --fail --silent --show-error \
+            --header "X-API-Key: $SMOKE_SERVICE_KEY" \
+            http://127.0.0.1:18000/api/v2/capabilities \
+            >/tmp/v2-capabilities.json
+
           python - <<'PY'
           import json
           from pathlib import Path
 
-          payload = json.loads(Path('/tmp/health.json').read_text())
-          assert payload['status'] == 'ok'
-          assert payload['service_auth_enabled'] is True
-          unauthorized = json.loads(Path('/tmp/unauthorized.json').read_text())
-          assert unauthorized['detail'] == 'Invalid API key'
+          health = json.loads(Path('/tmp/health.json').read_text())
+          assert health['status'] == 'ok'
+          assert health['version'] == '1.4.0'
+          assert health['service_auth_enabled'] is True
+
+          v1_unauthorized = json.loads(Path('/tmp/v1-unauthorized.json').read_text())
+          v2_unauthorized = json.loads(Path('/tmp/v2-unauthorized.json').read_text())
+          assert v1_unauthorized['detail'] == 'Invalid API key'
+          assert v2_unauthorized['detail'] == 'Invalid API key'
+
+          capabilities = json.loads(Path('/tmp/v2-capabilities.json').read_text())
+          assert capabilities['api_version'] == '2.0'
+          assert capabilities['application_version'] == '1.4.0'
+          assert capabilities['design_portfolio'] is True
+          assert capabilities['decision_graph'] is True
+          assert capabilities['deterministic_validation'] is True
+          assert capabilities['ranking_is_confidence'] is False
+          assert capabilities['placement_policies'] == ['balanced', 'wall_first', 'fit_first']
           PY
       - name: Verify runtime privileges
         run: |
