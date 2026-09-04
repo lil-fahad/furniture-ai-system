@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
 from collections import Counter
 from pathlib import Path
@@ -26,9 +27,29 @@ def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
 
 def validate_sha256(value: str) -> str:
     normalized = value.strip().lower()
-    if len(normalized) != 64 or any(char not in "0123456789abcdef" for char in normalized):
+    invalid = len(normalized) != 64 or any(
+        char not in "0123456789abcdef" for char in normalized
+    )
+    if invalid:
         raise ValueError("model SHA-256 must contain exactly 64 hexadecimal characters")
     return normalized
+
+
+def verify_model_artifact(model_dir: Path, expected_sha256: str) -> dict[str, object]:
+    expected = validate_sha256(expected_sha256)
+    weights = model_dir / "model.safetensors"
+    if not weights.is_file():
+        raise FileNotFoundError(weights)
+    actual = sha256_file(weights)
+    if not hmac.compare_digest(actual, expected):
+        raise ValueError(
+            f"model.safetensors SHA-256 mismatch: expected {expected}, got {actual}"
+        )
+    return {
+        "path": str(weights.resolve()),
+        "sha256": actual,
+        "size_bytes": weights.stat().st_size,
+    }
 
 
 def normalized_box(box: list[float], width: int, height: int) -> dict[str, float]:
@@ -41,7 +62,11 @@ def normalized_box(box: list[float], width: int, height: int) -> dict[str, float
         "x_max": min(max(x_max / width, 0.0), 1.0),
         "y_max": min(max(y_max / height, 0.0), 1.0),
     }
-    if normalized["x_max"] < normalized["x_min"] or normalized["y_max"] < normalized["y_min"]:
+    inverted = (
+        normalized["x_max"] < normalized["x_min"]
+        or normalized["y_max"] < normalized["y_min"]
+    )
+    if inverted:
         raise ValueError("detector returned an inverted bounding box")
     return normalized
 
@@ -101,7 +126,7 @@ def main() -> None:
         raise FileNotFoundError(args.ground_truth)
     if not args.images_dir.is_dir():
         raise FileNotFoundError(args.images_dir)
-    model_sha256 = validate_sha256(args.model_sha256)
+    model_artifact = verify_model_artifact(args.model_dir, args.model_sha256)
 
     import torch
     from PIL import Image
@@ -171,7 +196,7 @@ def main() -> None:
                 "model": {
                     "id": args.model_id,
                     "revision": args.model_revision,
-                    "sha256": model_sha256,
+                    "artifact": model_artifact,
                 },
                 "ground_truth_sha256": sha256_file(args.ground_truth),
                 "predictions_sha256": sha256_file(args.output),
@@ -182,6 +207,7 @@ def main() -> None:
                 "accepted_label_mapping": MODEL_TO_CANONICAL,
                 "ignored_model_labels": dict(sorted(ignored_labels.items())),
                 "fail_closed_on_missing_images": True,
+                "fail_closed_on_model_sha_mismatch": True,
             },
             indent=2,
             sort_keys=True,
