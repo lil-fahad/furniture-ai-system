@@ -7,7 +7,12 @@ from fastapi.testclient import TestClient
 from furniture_ai.api_entry import app
 from furniture_ai.contracts import FloorPlanAnalysis, Point, Room
 from furniture_ai.layout import furnish_floor_plan
-from furniture_ai.rendering import PromptCompiler, RenderPreviewRequest, RenderingService, SceneCompiler
+from furniture_ai.rendering import (
+    PromptCompiler,
+    RenderingService,
+    RenderPreviewRequest,
+    SceneCompiler,
+)
 
 
 def _design():
