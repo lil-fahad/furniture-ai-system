@@ -143,3 +143,14 @@ def test_pr_coordination_accepts_current_declared_branch() -> None:
         leases=[_lease()],
     )
     assert errors == []
+
+
+def test_coordination_workflow_runs_from_trusted_main() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github" / "workflows" / "ai-coordination.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "pull_request_target:" in workflow
+    assert "ref: main" in workflow
+    assert "persist-credentials: false" in workflow
+    assert "if: github.event_name == 'pull_request_target'" in workflow
