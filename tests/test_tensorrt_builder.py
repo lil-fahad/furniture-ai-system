@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import runpy
 from pathlib import Path
 
 import pytest
 
-
-MODULE = runpy.run_path("scripts/build_tensorrt_engine.py")
-build_command = MODULE["build_command"]
-shape_flags = MODULE["shape_flags"]
+from scripts.build_tensorrt_engine import build_command, shape_flags
 
 
 def test_tensorrt_builder_uses_strongly_typed_compatible_flags(tmp_path: Path) -> None:
