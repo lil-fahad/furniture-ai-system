@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 PAUSED_EXIT_CODE = 75
+RESTART_EXIT_CODE = 76
 STATE_DIR_NAME = ".furnitureai-local"
 DEFAULT_CONFIG = Path("training/local_training_jobs.json")
 
@@ -174,7 +175,8 @@ def build_command(repo: Path, job: dict[str, object], resume_allowed: bool) -> l
     if task_info["kind"] == "classifier":
         command = [
             python,
-            str(repo / Path(task_info["trainer"])),
+            "-m",
+            "training.local_resumable_classifier",
             str(data),
             "--mode",
             str(task_info["mode"]),
@@ -481,7 +483,9 @@ def main() -> int:
                 raise ValueError("sync config must be an object")
             sync_interval = max(60, int(sync.get("interval_seconds", 300)))
             if time.monotonic() - last_sync >= sync_interval:
-                sync_from_github(repo, sync)
+                if sync_from_github(repo, sync):
+                    log("new training code pulled from GitHub; restarting worker")
+                    return RESTART_EXIT_CODE
                 last_sync = time.monotonic()
                 config = load_config(config_path)
 
