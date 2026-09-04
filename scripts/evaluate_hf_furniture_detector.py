@@ -66,6 +66,7 @@ def main() -> None:
     )
     processor = AutoImageProcessor.from_pretrained(args.model_dir, local_files_only=True)
     model = AutoModelForObjectDetection.from_pretrained(args.model_dir, local_files_only=True)
+    label_mapping = dict(model.config.id2label)
     model = prepare_model(model, runtime)
 
     rows = load_manifest(args.benchmark)
@@ -99,7 +100,7 @@ def main() -> None:
         predictions.append(
             {
                 "image": str(image_path),
-                "labels": [model.config.id2label[int(label)] for label in result["labels"]],
+                "labels": [label_mapping[int(label)] for label in result["labels"]],
                 "scores": [float(score) for score in result["scores"]],
                 "boxes": [[float(value) for value in box] for box in result["boxes"]],
             }
@@ -121,7 +122,7 @@ def main() -> None:
             if len(latencies) >= 2
             else (latencies[0] if latencies else None)
         ),
-        "label_mapping": {str(key): value for key, value in model.config.id2label.items()},
+        "label_mapping": {str(key): value for key, value in label_mapping.items()},
         "artifacts": artifacts,
         "predictions": predictions,
         "note": (
