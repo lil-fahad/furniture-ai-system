@@ -29,12 +29,20 @@ class PromptCompiler:
                 f"grounded furniture=[{furniture_text}]"
             )
 
+        opening_lines = [
+            f"{opening.kind.value} {opening.id} from "
+            f"({opening.start.x:.2f}, {opening.start.y:.2f}) to "
+            f"({opening.end.x:.2f}, {opening.end.y:.2f})"
+            for opening in scene.openings
+        ]
+        opening_text = "; ".join(opening_lines) if opening_lines else "none supplied"
         positive_prompt = (
             "Photorealistic interior architecture photograph. "
             f"Design style: {scene.style}. "
             f"Camera: {scene.camera.preset}, {scene.camera.lens_mm:.1f}mm lens, "
             f"camera height {scene.camera.height_cm:.1f}cm. "
             "Preserve the supplied room geometry and every grounded furniture placement exactly. "
+            f"Preserve supplied openings exactly: [{opening_text}]. "
             "Keep furniture scale, orientation, and product identity consistent with the scene. "
             "Use physically plausible materials, realistic daylight and practical interior "
             "lighting, natural shadows, correct perspective, and high-detail architectural "
