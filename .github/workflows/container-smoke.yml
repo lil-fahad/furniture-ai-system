@@ -34,7 +34,7 @@ jobs:
           test -n "$user"
           test "$user" != "0"
           test "$user" != "root"
-          test "$version" = "1.4.0"
+          test "$version" = "1.3.0"
       - name: Start hardened container
         run: |
           service_key="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
@@ -81,7 +81,7 @@ jobs:
 
           health = json.loads(Path('/tmp/health.json').read_text())
           assert health['status'] == 'ok'
-          assert health['version'] == '1.4.0'
+          assert health['version'] == '1.3.0'
           assert health['service_auth_enabled'] is True
 
           v1_unauthorized = json.loads(Path('/tmp/v1-unauthorized.json').read_text())
@@ -91,7 +91,7 @@ jobs:
 
           capabilities = json.loads(Path('/tmp/v2-capabilities.json').read_text())
           assert capabilities['api_version'] == '2.0'
-          assert capabilities['application_version'] == '1.4.0'
+          assert capabilities['application_version'] == '1.3.0'
           assert capabilities['design_portfolio'] is True
           assert capabilities['decision_graph'] is True
           assert capabilities['deterministic_validation'] is True
