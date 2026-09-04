@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from furniture_ai.contracts import DesignResult, Product
 from furniture_ai.layout import load_catalog
-from furniture_ai.rendering.contracts import CameraSpec, SceneFurnitureItem, SceneRoom, SceneSpec
-
+from furniture_ai.rendering.contracts import (
+    CameraSpec,
+    SceneFurnitureItem,
+    SceneRoom,
+    SceneSpec,
+)
 
 DEFAULT_NEGATIVE_CONSTRAINTS = [
     "do not change the room boundary geometry",
@@ -49,11 +53,14 @@ class SceneCompiler:
                     if placement.source_product_id
                     else None
                 )
+                product_name = (
+                    product.name if product else placement.category.replace("_", " ")
+                )
                 furniture.append(
                     SceneFurnitureItem(
                         id=placement.id,
                         product_id=placement.source_product_id,
-                        product_name=product.name if product else placement.category.replace("_", " "),
+                        product_name=product_name,
                         category=placement.category,
                         room_id=room.id,
                         center=placement.center,
