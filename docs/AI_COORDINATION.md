@@ -1,26 +1,32 @@
 # FurnitureAI AI coordination v4
 
-FurnitureAI can be modified by multiple AI/coding tools at the same time. The coordination layer is designed to make every future coding session enter through the same observable process: full tracked-project bootstrap, live session census, scoped lease, conflict detection, and bilateral review when work genuinely overlaps.
+FurnitureAI can be modified by multiple AI/coding tools at the same time. The coordination layer makes every future coding session enter through the same observable process: tracked-project bootstrap, live session census, scoped lease, pre-edit conflict detection, and bilateral review when work genuinely overlaps.
 
 ## Authoritative surfaces
 
 - `/AGENTS.md` — mandatory first-action and merge rules for every coding AI.
 - GitHub issue #66 — chronological `AI-BOOTSTRAP`, `AI-LEASE`, collaboration, release, and `AI-MAIN-UPDATE` registry.
-- `scripts/ai_coordination.py` — bootstrap, live snapshot, manifest verification, and fail-closed PR guard.
-- `.github/workflows/ai-coordination.yml` — executes the guard from trusted `main` and publishes main updates.
+- `scripts/ai_coordination.py` — local bootstrap, live snapshot, manifest verification, and fail-closed PR guard.
+- `scripts/ai_remote_bootstrap.py` + `.github/workflows/ai-remote-bootstrap.yml` — trusted bootstrap for GitHub/API/connector-only agents that have no local shell.
+- `scripts/ai_lease_conflict_guard.py` — blocks overlap with active leases even before the peer creates a PR.
+- `.github/workflows/ai-coordination.yml` — executes trusted guards from `main` and publishes main updates.
 - `CLAUDE.md` and `.github/copilot-instructions.md` — agent-specific entry pointers back to `/AGENTS.md`.
 
 ## What "read the whole project" means operationally
 
-Before an AI edits anything, `bootstrap` runs on a clean task branch whose `HEAD` exactly equals live `main`. It enumerates every path returned by `git ls-files`, reads every tracked Git blob byte-for-byte, counts tracked/text/binary files and bytes, and creates a deterministic SHA-256 manifest.
+A bootstrap is tied to a dedicated task branch whose head exactly equals live `main`. The canonical manifest enumerates every tracked Git blob, reads its canonical bytes, counts tracked/text/binary files and bytes, and creates a deterministic SHA-256 manifest based on path, length, and per-file SHA-256.
 
-The PR guard later recomputes the manifest from its trusted `main` checkout. A receipt with a fabricated hash/count or a receipt from an older main SHA is rejected.
+The local path uses `git ls-files` + `git show HEAD:<path>`. The remote path uses trusted Git commit/tree/blob API objects. A regression test requires both paths to produce the same canonical manifest for the same commit. A truncated recursive Git tree or unreadable/size-mismatched blob is a hard failure.
 
-The machine check proves complete tracked-byte coverage. It cannot prove a model's internal semantic comprehension. `/AGENTS.md` therefore separately requires the AI to inspect project structure and consume source/configuration text necessary to understand architecture and dependencies; large text must be processed in chunks rather than silently skipped.
+The PR guard later recomputes the manifest from its trusted `main` checkout. A fabricated hash/count or a receipt from an older main SHA is rejected.
 
-Untracked local datasets, model binaries, secrets, caches, ignored files, and external systems are deliberately outside this repository-manifest claim.
+The machine check proves complete tracked-byte coverage. It cannot prove a model's internal semantic comprehension. `/AGENTS.md` therefore separately requires the AI to inspect project structure and consume source/configuration/test/security/deployment text needed to understand architecture and dependencies; large text must be processed in chunks rather than silently skipped.
 
-## Mandatory bootstrap
+Untracked local datasets, model binaries, secrets, caches, ignored files, and external systems are deliberately outside the repository-manifest claim.
+
+## Mandatory bootstrap: two trusted entry paths
+
+### Local checkout
 
 From a clean task branch created at current main:
 
@@ -34,99 +40,104 @@ python scripts/ai_coordination.py bootstrap \
   --post
 ```
 
-The command fails if the branch is `main`, local HEAD is stale, or the checkout is already dirty. It prints:
+The command fails if the branch is `main`, local HEAD is stale, or the checkout is already dirty.
+
+### GitHub/API/connector-only agent
+
+An AI with GitHub access but no shell must not skip bootstrap. It creates a task branch at exact current `main` and posts on issue #66:
+
+```text
+AI-BOOTSTRAP-REQUEST
+agent: <tool/model>
+session_id: <unique session id>
+task: <task>
+branch: <task branch at current main>
+files: <planned paths/globs>
+status: requested
+```
+
+The trusted `ai-remote-bootstrap` workflow only handles issue #66 comments from repository OWNER/MEMBER/COLLABORATOR identities. It checks out trusted `main` with credentials not persisted, resolves the requested branch, requires its head to equal current `main`, computes the canonical manifest from Git objects, reads live leases and open PR changed files, and posts the authoritative `AI-BOOTSTRAP` receipt as GitHub Actions.
+
+The request body is passed as data through an environment variable and parsed as strict record fields; it is never evaluated as shell code.
+
+## Bootstrap output and live census
+
+The receipt/state includes:
 
 - current main SHA;
 - repository manifest and file/byte counts;
-- `active_session_count`;
+- `active_session_count` / observed active sessions;
 - each active session's agent label, session ID, task, branch, and scope;
 - planned-scope conflicts;
-- the exact `AI-BOOTSTRAP` receipt.
+- `conflict_state: clear|coordination_required`.
 
-If GitHub write credentials are unavailable locally, omit `--post` and post the emitted receipt through the connected GitHub integration.
-
-## Live census
-
-Use:
+For local sessions, use:
 
 ```bash
 python scripts/ai_coordination.py snapshot --repo lil-fahad/furniture-ai-system
 ```
 
-The JSON schema exposes `active_session_count` and `active_sessions`. A session is an unexpired lease, not a GitHub username. This avoids pretending that one GitHub account equals one AI model.
+Connector-only agents read issue #66 and open PR changed-file state through GitHub. A session is an unexpired lease, not a GitHub username; this avoids pretending one shared account equals one AI.
 
 ## Receipt-backed leases
 
-After bootstrap and before editing, every session posts the `AI-LEASE` fields documented in `/AGENTS.md`, including:
+After a valid bootstrap and before editing, every session posts the `AI-LEASE` fields documented in `/AGENTS.md`, including unique `session_id`, exact `base_sha`, intended scope, and bootstrap SHA/manifest/file-count references.
 
-- unique `session_id`;
-- exact `base_sha`;
-- intended `files` scope;
-- `bootstrap_main_sha`;
-- `bootstrap_manifest_sha`;
-- `bootstrap_files`.
+The trusted guard requires a matching `AI-BOOTSTRAP` for the same branch/session, validates its `conflict_state`, SHA/counts against current `main`, and rejects changed files outside the declared lease scope.
 
-The trusted guard requires a matching `AI-BOOTSTRAP` for the same branch/session and validates its SHA/counts against the trusted current-main repository manifest. The guard also rejects PR files outside the declared lease scope.
-
-## Conflict detection happens twice
+## Conflict detection happens before and after PR creation
 
 ### Before editing
 
-Bootstrap compares the intended file/path scope with every active lease. If a collision is found it reports `coordination_required`. The AI must not edit the shared scope until ownership is serialized or collaboration is agreed.
+Bootstrap compares intended scope with every active lease and open PR changed-file inventory. If a collision is found it emits `conflict_state: coordination_required`; the AI must not edit shared scope until ownership is serialized or collaboration is agreed.
+
+### While another session only has a lease
+
+`ai_lease_conflict_guard.py` compares the current PR's exact changed files and lease scope with **every other active lease**, including a peer branch that has not opened a PR. This closes the race where one AI could previously ignore a bootstrap warning and merge before the peer published its PR.
+
+An old `coordination_required` receipt does not permanently poison a branch: if the peer releases/removes the conflicting scope, live conflict disappears and the guard can proceed. If both sessions still need the scope, bilateral collaboration must exist.
 
 ### At PR time
 
-The guard queries exact changed filenames for all open PRs. Exact overlap between two non-draft PRs is blocking by default even when Git could technically merge different lines.
-
-Draft overlap remains a warning because draft work may be exploratory; it is not ownership authorization.
+The core guard queries exact changed filenames for all open PRs. Exact overlap between two non-draft PRs is blocking by default even when Git could technically merge different lines. Draft overlap is a warning, not ownership authorization.
 
 ## Bilateral collaboration protocol
 
-`Coordination-Override` is deprecated and no longer authorizes overlap.
+`Coordination-Override` is diagnostic/legacy text and never authorizes overlap by itself.
 
-If two active sessions really must work on the same files, issue #66 needs:
+If two active sessions genuinely need the same files, issue #66 needs:
 
-1. `AI-COLLAB` identifying a `collab_id`, the same current `base_sha`, exactly two participating branches, exact `shared_files`, integration plan, and agreed status.
-2. `AI-COLLAB-ACK` from **both branches** for that collaboration.
-3. Before an overlapping PR passes, `AI-COLLAB-REVIEW` from the other branch for the current PR number and its **exact current head SHA**.
+1. `AI-COLLAB` identifying one `collab_id`, the same current `base_sha`, exactly the participating branches, shared files, integration plan, and agreed/active status.
+2. `AI-COLLAB-ACK` from both branches/sessions.
+3. For exact non-draft PR overlap, `AI-COLLAB-REVIEW` from the other branch for the current PR number and **exact current head SHA**.
 
-The exact-head requirement means any new commit invalidates the prior cross-review. Both PRs are checked independently, so both directions receive review if both proceed toward merge.
-
-If collaboration is not essential, serialization is safer: one session releases/removes the shared scope and the other proceeds.
+Any new commit invalidates the old exact-head peer review. Each overlapping PR is checked independently. If collaboration is unnecessary, serialization is safer: one session releases/removes shared scope and the other proceeds.
 
 ## Fail-closed PR policy
 
-For a non-draft PR targeting `main`, the trusted guard requires all of the following:
+For a non-draft PR targeting `main`, the trusted policy requires:
 
 1. PR base SHA equals live `main` SHA.
-2. PR branch has an active matching `AI-LEASE`.
-3. Lease contains all v4 session/bootstrap fields.
-4. Matching `AI-BOOTSTRAP` exists for the same branch + session.
-5. Bootstrap main SHA equals PR base/current main.
-6. Bootstrap manifest SHA and file/byte/text/binary counts equal the manifest recomputed from trusted `main`.
-7. PR changed files are inside the lease scope.
-8. Any exact non-draft overlap either disappears through serialization or satisfies bilateral collaboration + both ACKs + other-session exact-head review.
+2. PR branch has an active matching lease/session.
+3. Lease contains all required bootstrap/session fields.
+4. Matching bootstrap exists for the same branch/session.
+5. Bootstrap main SHA equals current main/PR base.
+6. Bootstrap manifest SHA and file/byte/text/binary counts equal the trusted current-main manifest.
+7. Bootstrap has explicit valid `conflict_state`.
+8. PR changed files are inside lease scope.
+9. No unresolved overlap with another active lease, even if the peer has no PR.
+10. Any exact non-draft PR overlap satisfies bilateral collaboration + ACKs + other-session exact-head review.
 
-A stale branch must be rebuilt/updated from current main, bootstrapped again, re-leased, and re-tested. A collaboration record never bypasses stale-main/bootstrap requirements.
+A stale branch must be rebuilt/updated from current main, bootstrapped again, re-leased, and re-tested. Collaboration never bypasses current-main/bootstrap/CI requirements.
 
 ## Trusted workflow execution
 
-The PR workflow uses `pull_request_target`, read-only PR/issue/content permissions, and explicitly checks out `main`. It never executes coordination code from the PR branch. This prevents a PR from weakening its own guard and passing itself.
-
-The manifest is recomputed inside that trusted checkout, not accepted merely because an AI wrote a hash into issue #66.
+The PR workflow uses `pull_request_target`, read-only PR/issue/content permissions, and explicitly checks out `main`; it never executes coordination code from the candidate PR. The remote bootstrap workflow likewise checks out trusted `main` and fails closed on incomplete Git API state.
 
 ## Main update feed
 
-After every main push, the workflow posts `AI-MAIN-UPDATE` with:
-
-- new main SHA and commit;
-- exact active session count;
-- session details: agent label, session ID, branch, task, and file scope;
-- open non-draft PRs;
-- undeclared non-draft PRs.
+After every main push, the coordination workflow posts `AI-MAIN-UPDATE` with new main SHA/commit, exact active session count/details, open non-draft PRs, and undeclared non-draft PRs. New agents must still read live state because an update comment is historical while leases/PRs can change afterward.
 
 ## Repository-setting limitation
 
-Repository policy currently relies on workflow checks, while GitHub branch protection/rulesets are a separate administrative setting. If `main` is not protected, an administrator can technically press a merge button despite a failing check. Coding agents must never use that bypass.
-
-For hard merge-button enforcement, GitHub should require `ai-coordination / pr-conflict-guard`, project CI, and branches to be up to date. An integration that only has read access to protection/rulesets must not claim those settings are enabled.
+Workflow checks fail closed, while GitHub branch protection/rulesets are a separate administrative setting. Coding agents must never use administrator/manual merge as a bypass. For hard merge-button enforcement, GitHub should require `ai-coordination / pr-conflict-guard`, project CI, and branches to be up to date.
