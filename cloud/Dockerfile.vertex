@@ -13,14 +13,16 @@ ENV HF_HOME=/workspace/job/huggingface \
 WORKDIR /opt/furniture-ai-system
 COPY training ./training
 COPY cloud ./cloud
+COPY scripts ./scripts
 COPY THIRD_PARTY_NOTICES.md ./THIRD_PARTY_NOTICES.md
 
 RUN python -m pip install --no-cache-dir \
     "google-cloud-storage>=2.18,<4" \
     "pillow>=10.3,<13" \
     "safetensors>=0.4,<1" \
+    "scikit-learn>=1.5,<2" \
     "timm>=1.0,<2" \
     "tqdm>=4.66,<5" \
     "transformers>=4.57,<6"
 
-ENTRYPOINT ["python", "cloud/openimages_vertex_job.py"]
+ENTRYPOINT ["python", "cloud/style_quality_vertex_job.py"]
