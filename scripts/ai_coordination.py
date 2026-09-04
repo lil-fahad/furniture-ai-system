@@ -571,11 +571,10 @@ def tracked_repository_manifest(root: Path) -> dict[str, object]:
     text_files = 0
     binary_files = 0
     for relative in paths:
-        file_path = root / relative
-        if file_path.is_symlink():
-            data = os.fsencode(os.readlink(file_path))
-        else:
-            data = file_path.read_bytes()
+        # Read the canonical tracked Git blob rather than platform-normalized
+        # working-tree bytes. This keeps receipts identical across CRLF/LF
+        # checkouts while consuming every tracked file byte-for-byte.
+        data = _git_bytes(root, "show", f"HEAD:{relative}")
         total_bytes += len(data)
         try:
             decoded = data.decode("utf-8")
