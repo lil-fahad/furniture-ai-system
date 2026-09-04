@@ -5,6 +5,7 @@ from furniture_ai.layout import load_catalog
 from furniture_ai.rendering.contracts import (
     CameraSpec,
     SceneFurnitureItem,
+    SceneOpening,
     SceneRoom,
     SceneSpec,
 )
@@ -81,6 +82,16 @@ class SceneCompiler:
                 )
             )
 
+        openings = [
+            SceneOpening(
+                id=opening.id,
+                kind=opening.kind,
+                start=opening.start.model_copy(),
+                end=opening.end.model_copy(),
+                confidence=opening.confidence,
+            )
+            for opening in design.floor_plan.openings
+        ]
         return SceneSpec(
             source_width=design.floor_plan.source_width,
             source_height=design.floor_plan.source_height,
@@ -89,5 +100,6 @@ class SceneCompiler:
             style=normalized_style,
             camera=CameraSpec(),
             rooms=rooms,
+            openings=openings,
             negative_constraints=list(DEFAULT_NEGATIVE_CONSTRAINTS),
         )
