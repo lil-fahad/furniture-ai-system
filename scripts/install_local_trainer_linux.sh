@@ -33,8 +33,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=${RUN_USER}
-WorkingDirectory=${REPO_ROOT}
-ExecStart=${PYTHON} -m training.local_worker --repo ${REPO_ROOT}
+WorkingDirectory="${REPO_ROOT}"
+ExecStart="${PYTHON}" -m training.local_worker --repo "${REPO_ROOT}"
 Restart=always
 RestartSec=15
 TimeoutStopSec=60
