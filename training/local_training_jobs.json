@@ -10,17 +10,23 @@
   "shutdown_grace_seconds": 45,
   "jobs": [
     {
-      "id": "style-classifier",
+      "id": "style-classifier-v2-convnext",
       "task": "style_classifier",
       "enabled": true,
       "data": "data/styles_prepared",
-      "output": "models/style_classifier/efficientnet_b0.pth",
+      "output": "models/style_classifier/convnext_base_v2.pth",
       "checkpoint_every_steps": 100,
       "args": [
+        "--model-name",
+        "hf_hub:timm/convnext_base.fb_in22k_ft_in1k",
         "--epochs",
         "30",
         "--batch-size",
-        "64",
+        "16",
+        "--gradient-accumulation-steps",
+        "2",
+        "--learning-rate",
+        "0.00005",
         "--device",
         "cuda",
         "--precision",
@@ -28,21 +34,27 @@
         "--class-balance",
         "sampler",
         "--early-stopping-patience",
-        "5"
+        "6"
       ]
     },
     {
-      "id": "room-classifier",
+      "id": "room-classifier-v2-convnext",
       "task": "room_classifier",
       "enabled": true,
       "data": "data/rooms",
-      "output": "models/room_classifier/efficientnet_b0.pth",
+      "output": "models/room_classifier/convnext_base_v2.pth",
       "checkpoint_every_steps": 100,
       "args": [
+        "--model-name",
+        "hf_hub:timm/convnext_base.fb_in22k_ft_in1k",
         "--epochs",
         "20",
         "--batch-size",
-        "32",
+        "16",
+        "--gradient-accumulation-steps",
+        "2",
+        "--learning-rate",
+        "0.00005",
         "--device",
         "cuda",
         "--precision",
@@ -50,7 +62,7 @@
         "--class-balance",
         "sampler",
         "--early-stopping-patience",
-        "5"
+        "6"
       ]
     },
     {
