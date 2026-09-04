@@ -20,24 +20,26 @@ defaults:
     shell: bash
 
 jobs:
-  quality:
+  runtime-quality:
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install runtime, development, and training dependencies
-        run: python -m pip install -e ".[dev,training]"
+      - name: Install runtime and development dependencies
+        run: python -m pip install -e ".[dev]"
       - name: Install pip-audit
         run: python -m pip install --upgrade pip-audit
-      - name: Dependency security audit
+      - name: Runtime dependency security audit
         run: |
           python -m pip freeze | grep -v '^furniture-ai-system==' > /tmp/requirements-audit.txt
           pip-audit --strict -r /tmp/requirements-audit.txt
@@ -46,11 +48,18 @@ jobs:
       - name: Compile
         run: python -m compileall src training tests scripts
       - name: Validate professional model metadata
+        if: ${{ matrix.python-version == '3.12' }}
         run: |
           python scripts/install_professional_bundle.py --check-spec
           python scripts/model_manifest.py
-      - name: Test
-        run: pytest --cov=furniture_ai --cov-report=term-missing
+      - name: Test runtime without heavyweight training stack
+        run: |
+          pytest --cov=furniture_ai --cov-report=term-missing \
+            --ignore=tests/test_hf_foundation_models.py \
+            --ignore=tests/test_nvidia_acceleration.py \
+            --ignore=tests/test_training_smoke.py \
+            --ignore=tests/test_style_dataset_pipeline.py \
+            --ignore=tests/test_train_floorplan_segmenter.py
       - name: Smoke-test standalone wheel resources
         if: ${{ matrix.python-version == '3.12' }}
         run: |
@@ -81,6 +90,7 @@ jobs:
           rm -rf build
           test ! -e build
       - name: Verify OpenAI secret wiring without disclosure
+        if: ${{ matrix.python-version == '3.12' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
@@ -94,6 +104,39 @@ jobs:
           print("OPENAI_API_KEY is configured")
           PY
       - name: Secret scan
+        if: ${{ matrix.python-version == '3.12' }}
         run: python scripts/scan_secrets.py
       - name: Repository audit
+        if: ${{ matrix.python-version == '3.12' }}
         run: python scripts/repository_audit.py
+
+  training-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install runtime, development, and training dependencies
+        run: python -m pip install -e ".[dev,training]"
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip-audit
+      - name: Full dependency security audit
+        run: |
+          python -m pip freeze | grep -v '^furniture-ai-system==' > /tmp/requirements-audit.txt
+          pip-audit --strict -r /tmp/requirements-audit.txt
+      - name: Verify training stack imports
+        run: |
+          python - <<'PY'
+          import timm
+          import torch
+          import torchvision
+
+          print("training stack verified", torch.__version__, torchvision.__version__, timm.__version__)
+          PY
+      - name: Run complete test suite with training dependencies
+        run: pytest --cov=furniture_ai --cov-report=term-missing
