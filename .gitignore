@@ -7,6 +7,8 @@ __pycache__/
 htmlcov/
 .venv/
 venv/
+.trainer-venv/
+.furnitureai-local/
 .env
 .env.*
 !.env.example
@@ -29,5 +31,6 @@ models/professional/installed/
 
 # Generated datasets and their source manifests are reviewed locally; do not commit them by default.
 data/styles/
+data/styles_prepared/
 data/style_sources.jsonl
 data/raw/
