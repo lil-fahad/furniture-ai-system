@@ -30,7 +30,8 @@ class RenderingService:
         warnings: list[str] = []
         if not renderer.photorealistic:
             warnings.append(
-                "The selected backend is a deterministic grounding preview, not a photorealistic renderer."
+                "The selected backend is a deterministic grounding preview, "
+                "not a photorealistic renderer."
             )
         return RenderPreviewResult(
             photorealistic=renderer.photorealistic,
