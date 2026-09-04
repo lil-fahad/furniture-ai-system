@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import math
 from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from shapely.geometry import Polygon
+
+from furniture_ai.geometry import room_polygon_from_coordinates
 
 NonNegativeFloat = Annotated[float, Field(ge=0)]
 Confidence = Annotated[float, Field(ge=0, le=1)]
-
-MIN_POLYGON_AREA = 1e-6
 
 
 class Unit(StrEnum):
@@ -64,15 +62,7 @@ class Room(BaseModel):
     @field_validator("polygon")
     @classmethod
     def validate_polygon_geometry(cls, points: list[Point]) -> list[Point]:
-        if not all(math.isfinite(point.x) and math.isfinite(point.y) for point in points):
-            raise ValueError("Room polygon coordinates must be finite")
-        polygon = Polygon([(point.x, point.y) for point in points])
-        if polygon.buffer(0).is_empty:
-            raise ValueError("Room polygon is degenerate (collinear or near-zero area)")
-        if not polygon.is_valid:
-            raise ValueError("Room polygon must be a simple (non-self-intersecting) polygon")
-        if polygon.area < MIN_POLYGON_AREA:
-            raise ValueError("Room polygon is degenerate (collinear or near-zero area)")
+        room_polygon_from_coordinates((point.x, point.y) for point in points)
         return points
 
 
