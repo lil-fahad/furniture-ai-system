@@ -35,11 +35,25 @@ if (-not (Test-Path $Python)) {
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -e "$RepoRoot[training]"
 
-# The persistent worker must not run as SYSTEM/Administrator. Grant only the
-# repository tree it needs for local state, checkpoints, models, and datasets.
-& icacls.exe $RepoRoot /grant "${WorkerAclSid}:(OI)(CI)M" /T /C | Out-Null
+# The persistent worker must not run as SYSTEM/Administrator. Code and the
+# virtual environment are read/execute only; only runtime/data/output trees are writable.
+$WritableRoots = @(
+    (Join-Path $RepoRoot ".furnitureai-local"),
+    (Join-Path $RepoRoot "models"),
+    (Join-Path $RepoRoot "data")
+)
+foreach ($path in $WritableRoots) {
+    New-Item -ItemType Directory -Force -Path $path | Out-Null
+}
+& icacls.exe $RepoRoot /grant:r "${WorkerAclSid}:(OI)(CI)RX" /T /C | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    throw "Could not grant the restricted training account access to $RepoRoot."
+    throw "Could not grant the restricted training account read access to $RepoRoot."
+}
+foreach ($path in $WritableRoots) {
+    & icacls.exe $path /grant:r "${WorkerAclSid}:(OI)(CI)M" /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not grant the restricted training account write access to $path."
+    }
 }
 
 $Arguments = "-m training.local_worker --repo `"$RepoRoot`""
