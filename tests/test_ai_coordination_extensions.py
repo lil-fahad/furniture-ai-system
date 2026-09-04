@@ -89,6 +89,44 @@ def test_bilateral_ack_allows_known_active_lease_overlap() -> None:
     assert errors == []
 
 
+def test_bilateral_ack_for_unrelated_shared_file_does_not_authorize_conflict() -> None:
+    current = _lease("feat/a", "src/shared.py")
+    peer = _lease("feat/b", "src/shared.py")
+    comments = [
+        _comment(
+            "AI-COLLAB\n"
+            "collab_id: c1\n"
+            "base_sha: abc\n"
+            "branches: feat/a, feat/b\n"
+            "shared_files: docs/notes.md\n"
+            "status: agreed"
+        ),
+        _comment(
+            "AI-COLLAB-ACK\n"
+            "collab_id: c1\n"
+            "branch: feat/a\n"
+            "status: accepted",
+            "2026-09-04T03:00:01Z",
+        ),
+        _comment(
+            "AI-COLLAB-ACK\n"
+            "collab_id: c1\n"
+            "branch: feat/b\n"
+            "status: accepted",
+            "2026-09-04T03:00:02Z",
+        ),
+    ]
+    errors = guard.active_lease_conflicts(
+        current_files={"src/shared.py"},
+        current_lease=current,
+        leases=[current, peer],
+        comments=comments,
+        base_sha="abc",
+    )
+    assert len(errors) == 1
+    assert "feat/b" in errors[0]
+
+
 def test_bootstrap_conflict_cannot_be_ignored() -> None:
     receipt = {"conflict_state": "coordination_required"}
     errors = guard.bootstrap_conflict_errors(
