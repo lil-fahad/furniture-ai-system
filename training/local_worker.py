@@ -8,10 +8,10 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
 
 PAUSED_EXIT_CODE = 75
 STATE_DIR_NAME = ".furnitureai-local"
@@ -128,8 +128,12 @@ def load_config(path: Path) -> dict[str, object]:
         arguments = job.get("args", [])
         if not isinstance(arguments, list) or not all(isinstance(item, str) for item in arguments):
             raise ValueError(f"job {job_id!r} args must be a list of strings")
-        forbidden = {"--output", "--resume", "--resume-output", "--checkpoint"}
-        if any(item in forbidden for item in arguments):
+        forbidden = ("--output", "--resume", "--resume-output", "--checkpoint")
+        if any(
+            item == option or item.startswith(option + "=")
+            for item in arguments
+            for option in forbidden
+        ):
             raise ValueError(f"job {job_id!r} args may not override worker-managed paths")
     return payload
 
@@ -246,6 +250,18 @@ def git_command(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]
 def sync_from_github(repo: Path, sync: dict[str, object]) -> bool:
     if not bool(sync.get("enabled", True)):
         return False
+    remote = str(sync.get("remote", "origin"))
+    branch = str(sync.get("branch", "main"))
+    current_branch = git_command(repo, "branch", "--show-current")
+    if current_branch.returncode != 0:
+        log(f"git branch unavailable; continuing current checkout: {current_branch.stderr.strip()}")
+        return False
+    if current_branch.stdout.strip() != branch:
+        log(
+            f"current branch is {current_branch.stdout.strip()!r}; "
+            f"automatic GitHub update requires {branch!r}"
+        )
+        return False
     status = git_command(repo, "status", "--porcelain", "--untracked-files=no")
     if status.returncode != 0:
         log(f"git status unavailable; continuing current checkout: {status.stderr.strip()}")
@@ -253,8 +269,6 @@ def sync_from_github(repo: Path, sync: dict[str, object]) -> bool:
     if status.stdout.strip():
         log("tracked working tree has local changes; skipping automatic GitHub update")
         return False
-    remote = str(sync.get("remote", "origin"))
-    branch = str(sync.get("branch", "main"))
     before = git_command(repo, "rev-parse", "HEAD")
     fetched = git_command(repo, "fetch", "--quiet", remote, branch)
     if fetched.returncode != 0:
