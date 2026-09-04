@@ -1,13 +1,26 @@
 from __future__ import annotations
 
+import importlib.util
 from datetime import UTC, datetime
+from pathlib import Path
+from types import ModuleType
 
-from scripts.ai_coordination import (
-    active_leases,
-    has_coordination_override,
-    overlap_paths,
-    parse_agent_record,
-)
+
+def _load_coordination_module() -> ModuleType:
+    script = Path(__file__).resolve().parents[1] / "scripts" / "ai_coordination.py"
+    spec = importlib.util.spec_from_file_location("furniture_ai_coordination", script)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load coordination helper from {script}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_coordination = _load_coordination_module()
+active_leases = _coordination.active_leases
+has_coordination_override = _coordination.has_coordination_override
+overlap_paths = _coordination.overlap_paths
+parse_agent_record = _coordination.parse_agent_record
 
 
 def _comment(body: str, created_at: str) -> dict[str, str]:
