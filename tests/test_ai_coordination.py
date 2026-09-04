@@ -23,6 +23,7 @@ _coordination = _load_coordination_module()
 active_leases = _coordination.active_leases
 bootstrap_preconditions = _coordination.bootstrap_preconditions
 bootstrap_records = _coordination.bootstrap_records
+build_snapshot = _coordination.build_snapshot
 collaboration_allows_overlap = _coordination.collaboration_allows_overlap
 declared_scope_overlap = _coordination.declared_scope_overlap
 has_coordination_override = _coordination.has_coordination_override
@@ -77,7 +78,8 @@ def _lease(
 
 
 def test_overlap_paths_is_deterministic() -> None:
-    assert overlap_paths({"b.py", "a.py"}, {"c.py", "a.py", "b.py"}) == ["a.py", "b.py"]
+    result = overlap_paths({"b.py", "a.py"}, {"c.py", "a.py", "b.py"})
+    assert result == ["a.py", "b.py"]
 
 
 def test_scope_match_and_declared_overlap_are_conservative() -> None:
@@ -307,6 +309,47 @@ def test_bootstrap_preconditions_require_clean_current_task_branch(tmp_path: Pat
     (tmp_path / "a.txt").write_text("changed\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="before edits"):
         bootstrap_preconditions(tmp_path, head)
+
+
+def test_snapshot_reports_exact_pr_changed_files_and_overlaps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pulls = [
+        {
+            "number": 10,
+            "title": "A",
+            "draft": False,
+            "head": {"ref": "feat/a", "sha": "ha"},
+            "base": {"sha": "abc"},
+            "updated_at": "2026-09-04T01:00:00Z",
+        },
+        {
+            "number": 11,
+            "title": "B",
+            "draft": False,
+            "head": {"ref": "feat/b", "sha": "hb"},
+            "base": {"sha": "abc"},
+            "updated_at": "2026-09-04T01:01:00Z",
+        },
+    ]
+    monkeypatch.setattr(_coordination, "open_pulls", lambda _repo: pulls)
+    monkeypatch.setattr(_coordination, "coordination_comments", lambda *_args: [])
+    monkeypatch.setattr(_coordination, "main_sha", lambda _repo: "abc")
+
+    def fake_pr_files(_repo: str, number: int) -> set[str]:
+        if number == 10:
+            return {"shared.py", "a.py"}
+        return {"shared.py", "b.py"}
+
+    monkeypatch.setattr(_coordination, "pr_files", fake_pr_files)
+    snapshot = build_snapshot("owner/repo")
+    rows = snapshot["open_pull_requests"]
+
+    assert snapshot["active_session_count"] == 0
+    assert rows[0]["changed_files"] == ["a.py", "shared.py"]
+    assert rows[0]["overlaps"] == [
+        {"pr": 11, "draft": False, "files": ["shared.py"]}
+    ]
 
 
 def test_coordination_workflow_runs_from_trusted_main() -> None:
