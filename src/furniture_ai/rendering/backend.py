@@ -52,6 +52,7 @@ class DeterministicMockRenderer:
 
         room_shapes: list[str] = []
         furniture_shapes: list[str] = []
+        opening_shapes: list[str] = []
         for room in scene.rooms:
             points = " ".join(f"{sx(point.x):.2f},{sy(point.y):.2f}" for point in room.polygon)
             room_shapes.append(
@@ -79,6 +80,14 @@ class DeterministicMockRenderer:
                     "</g>"
                 )
 
+        for opening in scene.openings:
+            opening_shapes.append(
+                f'<line x1="{sx(opening.start.x):.2f}" y1="{sy(opening.start.y):.2f}" '
+                f'x2="{sx(opening.end.x):.2f}" y2="{sy(opening.end.y):.2f}" '
+                f'stroke="#1677ff" stroke-width="7" stroke-linecap="round" '
+                f'data-kind="{escape(opening.kind.value)}" />'
+            )
+
         title = escape(scene.style)
         svg = (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
@@ -87,6 +96,7 @@ class DeterministicMockRenderer:
             f'<text x="40" y="28" font-size="18" fill="#111">'
             f"Scene preview — {title}</text>"
             + "".join(room_shapes)
+            + "".join(opening_shapes)
             + "".join(furniture_shapes)
             + "</svg>"
         )
