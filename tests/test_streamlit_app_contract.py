@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import runpy
 import sys
+from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 
