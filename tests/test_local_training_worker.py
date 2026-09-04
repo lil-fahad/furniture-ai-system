@@ -159,6 +159,20 @@ def test_windows_trainer_installers_use_restricted_service_account(relative_path
     assert "-RunLevel Limited" in text
 
 
+@pytest.mark.parametrize(
+    "relative_path",
+    ["scripts/install_local_trainer_windows.ps1", "FurnitureAI_GPU_Trainer_Setup.ps1"],
+)
+def test_windows_trainer_acl_keeps_code_read_only(relative_path: str) -> None:
+    root = Path(__file__).resolve().parents[1]
+    text = (root / relative_path).read_text(encoding="utf-8")
+    assert '${WorkerAclSid}:(OI)(CI)RX' in text
+    assert '${WorkerAclSid}:(OI)(CI)M' in text
+    assert 'Join-Path $RepoRoot ".furnitureai-local"' in text
+    assert 'Join-Path $RepoRoot "models"' in text
+    assert 'Join-Path $RepoRoot "data"' in text
+
+
 def test_successful_matching_job_is_not_retrained(tmp_path: Path) -> None:
     repo = tmp_path
     trainer = repo / "training" / "local_resumable_classifier.py"
