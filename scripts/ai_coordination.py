@@ -13,7 +13,6 @@ import json
 import os
 import sys
 import urllib.error
-import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 from typing import Any
@@ -69,7 +68,10 @@ def github_get_pages(repository: str, endpoint: str) -> list[dict[str, Any]]:
     separator = "&" if "?" in endpoint else "?"
     results: list[dict[str, Any]] = []
     for page in range(1, 101):
-        url = f"{API_ROOT}/repos/{repository}{endpoint}{separator}per_page=100&page={page}"
+        url = (
+            f"{API_ROOT}/repos/{repository}{endpoint}"
+            f"{separator}per_page=100&page={page}"
+        )
         payload = _request(url)
         if not isinstance(payload, list):
             raise RuntimeError(f"Expected list from GitHub endpoint {endpoint}")
@@ -147,7 +149,10 @@ def active_leases(
         except ValueError:
             continue
         active.append(lease)
-    return sorted(active, key=lambda item: (item.get("agent", ""), item.get("branch", "")))
+    return sorted(
+        active,
+        key=lambda item: (item.get("agent", ""), item.get("branch", "")),
+    )
 
 
 def overlap_paths(left: set[str], right: set[str]) -> list[str]:
@@ -173,16 +178,27 @@ def open_pulls(repository: str) -> list[dict[str, Any]]:
 
 
 def pr_files(repository: str, number: int) -> set[str]:
-    rows = github_get_pages(repository, f"/pulls/{number}/files?")
-    return {
-        filename
-        for row in rows
-        if isinstance((filename := row.get("filename")), str)
-    }
+    rows = github_get_pages(repository, f"/pulls/{number}/files")
+    files: set[str] = set()
+    for row in rows:
+        filename = row.get("filename")
+        if isinstance(filename, str):
+            files.add(filename)
+    return files
 
 
-def coordination_comments(repository: str, issue: int = COORDINATION_ISSUE) -> list[dict[str, Any]]:
-    return github_get_pages(repository, f"/issues/{issue}/comments?")
+def coordination_comments(
+    repository: str, issue: int = COORDINATION_ISSUE
+) -> list[dict[str, Any]]:
+    return github_get_pages(repository, f"/issues/{issue}/comments")
+
+
+def _pull_ref(pr: dict[str, Any], side: str, key: str) -> str | None:
+    payload = pr.get(side)
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get(key)
+    return value if isinstance(value, str) else None
 
 
 def build_snapshot(repository: str, issue: int = COORDINATION_ISSUE) -> dict[str, object]:
@@ -200,9 +216,9 @@ def build_snapshot(repository: str, issue: int = COORDINATION_ISSUE) -> dict[str
                 "number": pr.get("number"),
                 "title": pr.get("title"),
                 "draft": bool(pr.get("draft")),
-                "head": (pr.get("head") or {}).get("ref") if isinstance(pr.get("head"), dict) else None,
-                "head_sha": (pr.get("head") or {}).get("sha") if isinstance(pr.get("head"), dict) else None,
-                "base_sha": (pr.get("base") or {}).get("sha") if isinstance(pr.get("base"), dict) else None,
+                "head": _pull_ref(pr, "head", "ref"),
+                "head_sha": _pull_ref(pr, "head", "sha"),
+                "base_sha": _pull_ref(pr, "base", "sha"),
                 "updated_at": pr.get("updated_at"),
             }
             for pr in pulls
@@ -216,8 +232,9 @@ def check_pr(repository: str, number: int) -> int:
         raise RuntimeError(f"PR #{number} not found")
     current_files = pr_files(repository, number)
     current_draft = bool(current.get("draft"))
-    current_body = current.get("body") if isinstance(current.get("body"), str) else ""
-    current_base = (current.get("base") or {}).get("sha") if isinstance(current.get("base"), dict) else None
+    body_value = current.get("body")
+    current_body = body_value if isinstance(body_value, str) else ""
+    current_base = _pull_ref(current, "base", "sha")
     live_main = main_sha(repository)
 
     print(f"coordination: PR #{number} files={len(current_files)} draft={current_draft}")
@@ -242,18 +259,20 @@ def check_pr(repository: str, number: int) -> int:
             shown += f", ... (+{len(shared) - 20} more)"
         if current_draft or other_draft:
             print(
-                f"::warning::PR #{number} overlaps draft/experimental PR #{other_number}: {shown}"
+                f"::warning::PR #{number} overlaps draft/experimental "
+                f"PR #{other_number}: {shown}"
             )
             continue
         if has_coordination_override(current_body, other_number):
             print(
-                f"::warning::Overlap with PR #{other_number} explicitly acknowledged: {shown}"
+                f"::warning::Overlap with PR #{other_number} explicitly acknowledged: "
+                f"{shown}"
             )
             continue
         blocking.append((other_number, shared))
         print(
-            f"::error::Uncoordinated overlap with non-draft PR #{other_number}: {shown}. "
-            f"Coordinate on issue #{COORDINATION_ISSUE} or add "
+            f"::error::Uncoordinated overlap with non-draft PR #{other_number}: "
+            f"{shown}. Coordinate on issue #{COORDINATION_ISSUE} or add "
             f"`Coordination-Override: #{other_number}` with the reason to the PR body."
         )
 
@@ -283,6 +302,7 @@ def notify_main(repository: str, issue: int) -> None:
         for pr in pulls
         if not bool(pr.get("draft"))
     ]
+    agent_names = ", ".join(lease.get("agent", "unknown") for lease in leases)
     body = "\n".join(
         [
             "AI-MAIN-UPDATE",
@@ -290,8 +310,7 @@ def notify_main(repository: str, issue: int) -> None:
             f"main_sha: {sha}",
             f"commit: {message}",
             f"active_leases: {len(leases)}",
-            "active_agents: "
-            + (", ".join(lease.get("agent", "unknown") for lease in leases) or "none declared"),
+            "active_agents: " + (agent_names or "none declared"),
             "open_non_draft_prs: " + (" | ".join(ready) or "none"),
         ]
     )
