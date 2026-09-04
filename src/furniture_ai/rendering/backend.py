@@ -6,8 +6,8 @@ from typing import Protocol
 
 from furniture_ai.rendering.contracts import (
     RenderArtifact,
-    RenderPromptPackage,
     RendererKind,
+    RenderPromptPackage,
     SceneSpec,
 )
 
@@ -65,8 +65,12 @@ class DeterministicMockRenderer:
                 x = center_x - item_width / 2
                 y = center_y - item_depth / 2
                 label = escape(item.product_name)
+                rotation = (
+                    f"rotate({item.rotation_degrees:.2f} "
+                    f"{center_x:.2f} {center_y:.2f})"
+                )
                 furniture_shapes.append(
-                    f'<g transform="rotate({item.rotation_degrees:.2f} {center_x:.2f} {center_y:.2f})">'
+                    f'<g transform="{rotation}">'
                     f'<rect x="{x:.2f}" y="{y:.2f}" width="{item_width:.2f}" '
                     f'height="{item_depth:.2f}" rx="6" fill="#dedede" stroke="#555" '
                     f'stroke-width="2" />'
@@ -75,11 +79,13 @@ class DeterministicMockRenderer:
                     "</g>"
                 )
 
+        title = escape(scene.style)
         svg = (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
             f'viewBox="0 0 {width} {height}">'
             '<rect width="100%" height="100%" fill="white" />'
-            f'<text x="40" y="28" font-size="18" fill="#111">Scene preview — {escape(scene.style)}</text>'
+            f'<text x="40" y="28" font-size="18" fill="#111">'
+            f"Scene preview — {title}</text>"
             + "".join(room_shapes)
             + "".join(furniture_shapes)
             + "</svg>"
