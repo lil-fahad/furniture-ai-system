@@ -505,13 +505,37 @@ def build_snapshot(repository: str, issue: int = COORDINATION_ISSUE) -> dict[str
     lease_by_branch = {
         lease["branch"]: lease for lease in leases if isinstance(lease.get("branch"), str)
     }
+    file_sets: dict[int, set[str]] = {}
+    for pr in pulls:
+        number = pr.get("number")
+        if isinstance(number, int):
+            file_sets[number] = pr_files(repository, number)
+
     open_rows: list[dict[str, object]] = []
     for pr in pulls:
+        number = pr.get("number")
         head = _pull_ref(pr, "head", "ref")
         lease = lease_by_branch.get(head or "")
+        overlaps: list[dict[str, object]] = []
+        if isinstance(number, int):
+            for other in pulls:
+                other_number = other.get("number")
+                if not isinstance(other_number, int) or other_number == number:
+                    continue
+                shared = overlap_paths(
+                    file_sets.get(number, set()), file_sets.get(other_number, set())
+                )
+                if shared:
+                    overlaps.append(
+                        {
+                            "pr": other_number,
+                            "draft": bool(other.get("draft")),
+                            "files": shared,
+                        }
+                    )
         open_rows.append(
             {
-                "number": pr.get("number"),
+                "number": number,
                 "title": pr.get("title"),
                 "draft": bool(pr.get("draft")),
                 "head": head,
@@ -520,6 +544,10 @@ def build_snapshot(repository: str, issue: int = COORDINATION_ISSUE) -> dict[str
                 "updated_at": pr.get("updated_at"),
                 "coordination_state": "declared" if lease else "undeclared",
                 "active_lease": lease,
+                "changed_files": sorted(file_sets.get(number, set()))
+                if isinstance(number, int)
+                else [],
+                "overlaps": overlaps,
             }
         )
     sessions = [
@@ -660,16 +688,44 @@ def run_bootstrap(args: argparse.Namespace) -> int:
     manifest = tracked_repository_manifest(root)
     comments = coordination_comments(args.repo, args.issue)
     leases = active_leases(comments)
-    conflicts: list[str] = []
+    conflict_set: set[str] = set()
     for lease in leases:
         other_branch = lease.get("branch", "")
         if other_branch == branch:
             continue
         shared = declared_scope_overlap(args.files, lease.get("files"))
         if shared:
-            conflicts.append(
-                f"{other_branch} ({lease.get('task', 'unknown task')}): " + "; ".join(shared)
+            conflict_set.add(
+                f"lease {other_branch} ({lease.get('task', 'unknown task')}): "
+                + "; ".join(shared)
             )
+
+    open_pr_inventory: list[dict[str, object]] = []
+    for pr in open_pulls(args.repo):
+        number = pr.get("number")
+        if not isinstance(number, int):
+            continue
+        head = _pull_ref(pr, "head", "ref") or "unknown-branch"
+        changed = pr_files(args.repo, number)
+        open_pr_inventory.append(
+            {
+                "number": number,
+                "title": pr.get("title"),
+                "draft": bool(pr.get("draft")),
+                "head": head,
+                "changed_files": sorted(changed),
+            }
+        )
+        if head == branch:
+            continue
+        shared_exact = sorted(
+            path for path in changed if scope_contains_path(args.files, path)
+        )
+        if shared_exact:
+            conflict_set.add(
+                f"PR #{number} {head}: exact files " + ", ".join(shared_exact)
+            )
+    conflicts = sorted(conflict_set)
     receipt = bootstrap_receipt_body(
         agent=args.agent,
         session_id=args.session_id,
@@ -689,6 +745,7 @@ def run_bootstrap(args: argparse.Namespace) -> int:
                 "manifest": manifest,
                 "active_session_count": len(leases),
                 "active_sessions": leases,
+                "open_pull_requests": open_pr_inventory,
                 "scope_conflicts": conflicts,
             },
             ensure_ascii=False,
@@ -744,7 +801,9 @@ def check_pr(repository: str, number: int) -> int:
     current_lease = lease_for_branch(leases, current_head)
     if current_lease is not None:
         outside_scope = sorted(
-            path for path in current_files if not scope_contains_path(current_lease.get("files"), path)
+            path
+            for path in current_files
+            if not scope_contains_path(current_lease.get("files"), path)
         )
         if outside_scope:
             blocking_reasons.append("PR changes files outside its declared AI-LEASE scope")
