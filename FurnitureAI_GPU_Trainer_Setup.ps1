@@ -158,11 +158,25 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "GPU READY for the installation account: $gpuJson"
 
-# The persistent task runs under Network Service, never SYSTEM/Highest. Give
-# that restricted account modify access only to the dedicated trainer tree.
-& icacls.exe $InstallRoot /grant "${WorkerAclSid}:(OI)(CI)M" /T /C | Out-Null
+# The persistent task runs under Network Service, never SYSTEM/Highest. Code
+# and the virtual environment are read/execute only; runtime/data/output trees are writable.
+$WritableRoots = @(
+    (Join-Path $RepoRoot ".furnitureai-local"),
+    (Join-Path $RepoRoot "models"),
+    (Join-Path $RepoRoot "data")
+)
+foreach ($path in $WritableRoots) {
+    New-Item -ItemType Directory -Force -Path $path | Out-Null
+}
+& icacls.exe $InstallRoot /grant:r "${WorkerAclSid}:(OI)(CI)RX" /T /C | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    throw "Could not grant the restricted training account access to $InstallRoot."
+    throw "Could not grant the restricted training account read access to $InstallRoot."
+}
+foreach ($path in $WritableRoots) {
+    & icacls.exe $path /grant:r "${WorkerAclSid}:(OI)(CI)M" /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not grant the restricted training account write access to $path."
+    }
 }
 
 $Action = New-ScheduledTaskAction `
