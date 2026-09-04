@@ -4,6 +4,7 @@ import json
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
+from typing import Literal
 
 from shapely.affinity import rotate
 from shapely.geometry import LineString, Polygon, box
@@ -18,6 +19,10 @@ from furniture_ai.contracts import (
 )
 
 WALL_CATEGORIES = {"sofa", "bed", "wardrobe", "tv_unit", "desk", "cabinet"}
+PlacementPolicyName = Literal["balanced", "wall_first", "fit_first"]
+VALID_PLACEMENT_POLICIES: frozenset[str] = frozenset(
+    {"balanced", "wall_first", "fit_first"}
+)
 
 
 def _catalog_text(path: str | Path | None) -> str:
@@ -82,7 +87,12 @@ def _dimensions(
     return product.width_cm * scale, product.depth_cm * scale, "room-relative"
 
 
-def _candidate_centers(room: Polygon, wall_preferred: bool) -> list[tuple[float, float]]:
+def _candidate_centers(
+    room: Polygon,
+    wall_preferred: bool,
+    *,
+    policy: PlacementPolicyName = "balanced",
+) -> list[tuple[float, float]]:
     min_x, min_y, max_x, max_y = room.bounds
     fractions = (0.12, 0.25, 0.38, 0.50, 0.62, 0.75, 0.88)
     candidates = [
@@ -94,10 +104,13 @@ def _candidate_centers(room: Polygon, wall_preferred: bool) -> list[tuple[float,
         for y_fraction in fractions
     ]
     candidates = [candidate for candidate in candidates if room.covers(candidate)]
-    if wall_preferred:
+    centroid = room.centroid
+
+    if policy == "fit_first":
+        candidates.sort(key=lambda point: (point.distance(centroid), point.y, point.x))
+    elif wall_preferred:
         candidates.sort(key=lambda point: (point.distance(room.boundary), point.y, point.x))
     else:
-        centroid = room.centroid
         candidates.sort(key=lambda point: (point.distance(centroid), point.y, point.x))
     return [(point.x, point.y) for point in candidates]
 
@@ -120,13 +133,48 @@ def _valid(
     return not any(candidate.intersects(existing) for existing in placed)
 
 
+def _ordered_products(
+    products: list[Product],
+    policy: PlacementPolicyName,
+) -> list[Product]:
+    ordered = list(products)
+    if policy == "wall_first":
+        ordered.sort(
+            key=lambda product: (
+                product.category not in WALL_CATEGORIES,
+                product.category,
+                product.id,
+            )
+        )
+    elif policy == "fit_first":
+        ordered.sort(
+            key=lambda product: (
+                product.width_cm * product.depth_cm,
+                product.category,
+                product.id,
+            )
+        )
+    else:
+        ordered.sort(key=lambda product: (product.category, product.id))
+    return ordered
+
+
 def furnish_floor_plan(
     floor_plan: FloorPlanAnalysis,
     *,
     room_type_overrides: dict[str, str] | None = None,
     catalog: list[Product] | None = None,
+    placement_policy: PlacementPolicyName = "balanced",
 ) -> DesignResult:
-    """Furnish a floor plan without mutating the caller's object."""
+    """Furnish a floor plan without mutating the caller's object.
+
+    ``placement_policy`` changes deterministic search order only. It is not an
+    aesthetic score or a claim that one policy is universally better.
+    """
+    if placement_policy not in VALID_PLACEMENT_POLICIES:
+        allowed = ", ".join(sorted(VALID_PLACEMENT_POLICIES))
+        raise ValueError(f"Unknown placement_policy {placement_policy!r}; expected one of: {allowed}")
+
     active_catalog = catalog or load_catalog()
     override = room_type_overrides or {}
     plan = floor_plan.model_copy(deep=True)
@@ -144,8 +192,10 @@ def furnish_floor_plan(
         short_side = max(min(max_x - min_x, max_y - min_y), 1.0)
         clearance = short_side * 0.025
         wall_margin = short_side * 0.008
-        products = [product for product in active_catalog if room.room_type in product.room_types]
-        products.sort(key=lambda product: (product.category, product.id))
+        products = [
+            product for product in active_catalog if room.room_type in product.room_types
+        ]
+        products = _ordered_products(products, placement_policy)
         placed_shapes: list[Polygon] = []
         placements: list[FurniturePlacement] = []
 
@@ -154,10 +204,21 @@ def furnish_floor_plan(
             if width <= 0 or depth <= 0:
                 continue
             accepted: tuple[float, float, float, Polygon] | None = None
-            for cx, cy in _candidate_centers(polygon, product.category in WALL_CATEGORIES):
+            for cx, cy in _candidate_centers(
+                polygon,
+                product.category in WALL_CATEGORIES,
+                policy=placement_policy,
+            ):
                 for angle in (0.0, 90.0):
                     candidate = rectangle(cx, cy, width, depth, angle)
-                    if _valid(polygon, candidate, placed_shapes, gates, clearance, wall_margin):
+                    if _valid(
+                        polygon,
+                        candidate,
+                        placed_shapes,
+                        gates,
+                        clearance,
+                        wall_margin,
+                    ):
                         accepted = (cx, cy, angle, candidate)
                         break
                 if accepted:
