@@ -103,6 +103,48 @@ def test_output_cannot_overwrite_source_or_calibration(tmp_path: Path) -> None:
         )
 
 
+def test_manifest_cannot_overwrite_source_or_output(tmp_path: Path) -> None:
+    source = tmp_path / "model.onnx"
+    source.write_bytes(b"onnx")
+    calibration = tmp_path / "calibration.npy"
+    np.save(calibration, np.ones((1, 3), dtype=np.float32))
+    output = tmp_path / "model.fp8.onnx"
+
+    with pytest.raises(ValueError, match="Manifest path must differ"):
+        run_quantization(
+            onnx=source,
+            calibration_data=calibration,
+            output=output,
+            manifest=source,
+            quantize_mode="fp8",
+            quantize_fn=lambda *args, **kwargs: None,
+        )
+
+
+def test_existing_output_is_rejected_before_quantization(tmp_path: Path) -> None:
+    source = tmp_path / "model.onnx"
+    source.write_bytes(b"onnx")
+    calibration = tmp_path / "calibration.npy"
+    np.save(calibration, np.ones((1, 3), dtype=np.float32))
+    output = tmp_path / "model.fp8.onnx"
+    output.write_bytes(b"stale-output")
+    called = False
+
+    def fake_quantize(*args: object, **kwargs: object) -> None:
+        nonlocal called
+        called = True
+
+    with pytest.raises(FileExistsError, match="existing output"):
+        run_quantization(
+            onnx=source,
+            calibration_data=calibration,
+            output=output,
+            quantize_mode="fp8",
+            quantize_fn=fake_quantize,
+        )
+    assert called is False
+
+
 def test_quantization_passes_arrays_and_records_provenance(tmp_path: Path) -> None:
     source = tmp_path / "model.onnx"
     source.write_bytes(b"source-onnx")
