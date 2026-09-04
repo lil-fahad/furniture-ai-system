@@ -25,7 +25,15 @@ class FloorPlanAnalyzer:
         image: Image.Image,
         *,
         pixels_per_cm: float | None = None,
+        infer_semantics: bool = True,
     ) -> FloorPlanAnalysis:
+        """Extract room geometry and optionally apply the legacy semantic heuristic.
+
+        ``infer_semantics=False`` is the v2-safe mode: detected rooms remain the
+        generic ``room`` type with no semantic confidence until an explicit
+        semantic source (for example a validated model response or user input)
+        supplies labels. The default stays ``True`` for v1 compatibility.
+        """
         rgb = np.asarray(image.convert("RGB"))
         room_polygons = self._extract_room_polygons(rgb)
         warnings: list[str] = []
@@ -44,7 +52,11 @@ class FloorPlanAnalyzer:
             ]
             warnings.append("No enclosed rooms were detected; a whole-plan fallback room was used")
 
-        room_types = infer_room_types(room_polygons)
+        room_types = (
+            infer_room_types(room_polygons)
+            if infer_semantics
+            else ["room"] * len(room_polygons)
+        )
         rooms: list[Room] = []
         for index, polygon in enumerate(room_polygons):
             room_id = f"room-{index + 1}"
@@ -64,14 +76,26 @@ class FloorPlanAnalyzer:
                     room_type=room_types[index],
                     polygon=room_points,
                     area=float(polygon.area),
-                    # This remains semantic-label confidence, not geometry quality.
-                    confidence=0.55 if len(room_polygons) > 1 else 0.35,
+                    # v1 keeps its historical semantic-label heuristic. V2
+                    # geometry-only analysis carries no semantic confidence.
+                    confidence=(
+                        (0.55 if len(room_polygons) > 1 else 0.35)
+                        if infer_semantics
+                        else None
+                    ),
                 )
             )
 
+        if not infer_semantics:
+            warnings.append(
+                "Room semantic labels were intentionally left unresolved by geometry-only analysis"
+            )
         warnings.append(
             "Door and window extraction requires a trained segmenter and was not inferred"
         )
+        analysis_method = "opencv-connected-components"
+        if not infer_semantics:
+            analysis_method += "+geometry-only"
         return FloorPlanAnalysis(
             source_width=image.width,
             source_height=image.height,
@@ -80,7 +104,7 @@ class FloorPlanAnalyzer:
             rooms=rooms,
             openings=[],
             warnings=warnings,
-            analysis_method="opencv-connected-components",
+            analysis_method=analysis_method,
         )
 
     def _extract_room_polygons(self, rgb: np.ndarray) -> list[Polygon]:
