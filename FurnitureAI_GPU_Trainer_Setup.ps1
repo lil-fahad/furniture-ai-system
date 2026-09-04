@@ -10,6 +10,9 @@ $RepoUrl = "https://github.com/lil-fahad/furniture-ai-system.git"
 $RepoRoot = Join-Path $InstallRoot "repo"
 $VenvRoot = Join-Path $InstallRoot "venv"
 $PythonExe = Join-Path $VenvRoot "Scripts\python.exe"
+$NetworkServiceSid = New-Object Security.Principal.SecurityIdentifier("S-1-5-20")
+$WorkerAccount = $NetworkServiceSid.Translate([Security.Principal.NTAccount]).Value
+$WorkerAclSid = "*S-1-5-20"
 
 function Test-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -97,8 +100,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "nvidia-smi could not access the GPU. Fix the NVIDIA driver before training."
 }
 
+# Running this setup is the explicit administrative approval point for code
+# installation/update. The persistent worker does not self-update by default.
 if (Test-Path (Join-Path $RepoRoot ".git")) {
-    Write-Host "Updating FurnitureAI from GitHub..."
+    Write-Host "Updating the explicitly installed FurnitureAI checkout..."
     & $GitExe -C $RepoRoot fetch origin main
     if ($LASTEXITCODE -ne 0) { throw "GitHub fetch failed." }
     & $GitExe -C $RepoRoot checkout main
@@ -151,13 +156,27 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host $gpuJson
     throw "PyTorch cannot use CUDA on this computer. Update the NVIDIA driver or install a CUDA-enabled PyTorch build, then rerun this setup."
 }
-Write-Host "GPU READY: $gpuJson"
+Write-Host "GPU READY for the installation account: $gpuJson"
 
-# Ensure Git is visible to the SYSTEM account that runs the boot task.
-$gitDir = Split-Path -Parent $GitExe
-$machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-if (($machinePath -split ';') -notcontains $gitDir) {
-    [Environment]::SetEnvironmentVariable("Path", "$machinePath;$gitDir", "Machine")
+# The persistent task runs under Network Service, never SYSTEM/Highest. Code
+# and the virtual environment are read/execute only; runtime/data/output trees are writable.
+$WritableRoots = @(
+    (Join-Path $RepoRoot ".furnitureai-local"),
+    (Join-Path $RepoRoot "models"),
+    (Join-Path $RepoRoot "data")
+)
+foreach ($path in $WritableRoots) {
+    New-Item -ItemType Directory -Force -Path $path | Out-Null
+}
+& icacls.exe $InstallRoot /grant:r "${WorkerAclSid}:(OI)(CI)RX" /T /C | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not grant the restricted training account read access to $InstallRoot."
+}
+foreach ($path in $WritableRoots) {
+    & icacls.exe $path /grant:r "${WorkerAclSid}:(OI)(CI)M" /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not grant the restricted training account write access to $path."
+    }
 }
 
 $Action = New-ScheduledTaskAction `
@@ -166,9 +185,9 @@ $Action = New-ScheduledTaskAction `
     -WorkingDirectory $RepoRoot
 $Trigger = New-ScheduledTaskTrigger -AtStartup
 $Principal = New-ScheduledTaskPrincipal `
-    -UserId "SYSTEM" `
+    -UserId $WorkerAccount `
     -LogonType ServiceAccount `
-    -RunLevel Highest
+    -RunLevel Limited
 $Settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
     -RestartCount 999 `
@@ -182,7 +201,7 @@ $Task = New-ScheduledTask `
     -Trigger $Trigger `
     -Principal $Principal `
     -Settings $Settings `
-    -Description "FurnitureAI GPU-only autonomous local model training worker"
+    -Description "FurnitureAI GPU-only local model training worker (restricted account)"
 Register-ScheduledTask -TaskName $TaskName -InputObject $Task -Force | Out-Null
 
 try { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue } catch {}
@@ -191,6 +210,7 @@ Start-ScheduledTask -TaskName $TaskName
 Write-Host ""
 Write-Host "=== READY ==="
 Write-Host "GPU training worker installed and started."
+Write-Host "Worker account: $WorkerAccount (restricted service account)"
 Write-Host "Repository: $RepoRoot"
 Write-Host "Datasets expected under: $RepoRoot\data\"
 Write-Host "Worker state: $RepoRoot\.furnitureai-local\state.json"
@@ -198,3 +218,5 @@ Write-Host "Training logs: $RepoRoot\.furnitureai-local\logs\"
 Write-Host "Checkpoints: $RepoRoot\.furnitureai-local\checkpoints\"
 Write-Host "The worker starts automatically on every Windows boot and resumes from the latest valid checkpoint."
 Write-Host "It only runs allow-listed FurnitureAI model-training tasks."
+Write-Host "Automatic GitHub code synchronization is disabled by default. Rerun this setup to explicitly update code."
+Write-Host "If a Windows service session cannot access your NVIDIA GPU, do not switch to SYSTEM; use a dedicated restricted training account or the Linux systemd installation."

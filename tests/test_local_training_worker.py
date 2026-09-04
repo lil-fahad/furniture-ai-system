@@ -128,6 +128,51 @@ def test_sync_skips_when_checkout_is_not_configured_branch(
     assert calls == [("branch", "--show-current")]
 
 
+def test_disabled_sync_never_touches_git(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def forbidden_git(*_args, **_kwargs):
+        pytest.fail("disabled synchronization must not execute git")
+
+    monkeypatch.setattr(local_worker, "git_command", forbidden_git)
+    assert local_worker.sync_from_github(tmp_path, {"enabled": False}) is False
+
+
+def test_committed_training_queue_disables_code_sync() -> None:
+    root = Path(__file__).resolve().parents[1]
+    payload = json.loads(
+        (root / "training" / "local_training_jobs.json").read_text(encoding="utf-8")
+    )
+    assert payload["sync"]["enabled"] is False
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    ["scripts/install_local_trainer_windows.ps1", "FurnitureAI_GPU_Trainer_Setup.ps1"],
+)
+def test_windows_trainer_installers_use_restricted_service_account(relative_path: str) -> None:
+    root = Path(__file__).resolve().parents[1]
+    text = (root / relative_path).read_text(encoding="utf-8")
+    assert '-UserId "SYSTEM"' not in text
+    assert "-RunLevel Highest" not in text
+    assert "S-1-5-20" in text
+    assert "-RunLevel Limited" in text
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    ["scripts/install_local_trainer_windows.ps1", "FurnitureAI_GPU_Trainer_Setup.ps1"],
+)
+def test_windows_trainer_acl_keeps_code_read_only(relative_path: str) -> None:
+    root = Path(__file__).resolve().parents[1]
+    text = (root / relative_path).read_text(encoding="utf-8")
+    assert '${WorkerAclSid}:(OI)(CI)RX' in text
+    assert '${WorkerAclSid}:(OI)(CI)M' in text
+    assert 'Join-Path $RepoRoot ".furnitureai-local"' in text
+    assert 'Join-Path $RepoRoot "models"' in text
+    assert 'Join-Path $RepoRoot "data"' in text
+
+
 def test_successful_matching_job_is_not_retrained(tmp_path: Path) -> None:
     repo = tmp_path
     trainer = repo / "training" / "local_resumable_classifier.py"
