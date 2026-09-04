@@ -6,6 +6,7 @@ from furniture_ai.rendering.contracts import (
     RenderPreviewResult,
     RenderPromptPackage,
     SceneFurnitureItem,
+    SceneOpening,
     SceneRoom,
     SceneSpec,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "RenderingService",
     "SceneCompiler",
     "SceneFurnitureItem",
+    "SceneOpening",
     "SceneRoom",
     "SceneSpec",
 ]
