@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     )
     model_manifest_path: Path = Path("models/manifest.json")
     professional_models_root: Path = Path("models/professional/installed/pretrained")
+    professional_vision_device: str = "auto"
+    professional_vision_precision: Literal["auto", "fp32", "fp16", "bf16"] = "auto"
+    professional_vision_torch_compile: bool = False
 
     _catalog_path_overridden: bool = PrivateAttr(default=False)
     _model_manifest_path_overridden: bool = PrivateAttr(default=False)
@@ -59,6 +62,16 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("professional_vision_device")
+    @classmethod
+    def validate_professional_vision_device(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized in {"auto", "cpu", "cuda"}:
+            return normalized
+        if normalized.startswith("cuda:") and normalized[5:].isdigit():
+            return normalized
+        raise ValueError("PROFESSIONAL_VISION_DEVICE must be auto, cpu, cuda, or cuda:<index>")
 
     @model_validator(mode="after")
     def validate_production_security(self) -> Settings:
