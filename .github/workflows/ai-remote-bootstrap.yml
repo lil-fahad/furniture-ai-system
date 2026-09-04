@@ -1,0 +1,45 @@
+name: ai-remote-bootstrap
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-remote-bootstrap-${{ github.event.comment.id }}
+  cancel-in-progress: false
+
+jobs:
+  bootstrap-request:
+    if: >-
+      github.event.issue.number == 66 &&
+      !github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, 'AI-BOOTSTRAP-REQUEST') &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER' ||
+       github.event.comment.author_association == 'COLLABORATOR')
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted bootstrap implementation from main
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Validate request and publish trusted bootstrap receipt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AI_BOOTSTRAP_REQUEST: ${{ github.event.comment.body }}
+        run: >-
+          python scripts/ai_remote_bootstrap.py
+          --repo "$GITHUB_REPOSITORY"
+          --issue 66
