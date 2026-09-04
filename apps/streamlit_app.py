@@ -46,12 +46,17 @@ if uploaded and st.button("Analyze and furnish", type="primary"):
     except requests.Timeout:
         st.error(f"The API at {API_URL} did not respond within 180 seconds. Try again later.")
         st.stop()
-    except requests.RequestException as exc:
-        st.error(f"API unreachable at {API_URL}: {exc}")
+    except requests.RequestException:
+        st.error(f"The API at {API_URL} is unreachable. Check the service and try again.")
         st.stop()
     if response.ok:
+        try:
+            success_payload = response.json()
+        except ValueError:
+            st.error("The API returned an invalid success response. Try again later.")
+            st.stop()
         st.success("Analysis complete")
-        st.json(response.json())
+        st.json(success_payload)
     else:
         try:
             error_payload = response.json()
