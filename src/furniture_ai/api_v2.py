@@ -16,7 +16,7 @@ from furniture_ai.portfolio import (
     DesignPortfolioRequest,
     DesignPortfolioResult,
 )
-from furniture_ai.rendering import RenderPreviewRequest, RenderPreviewResult, RenderingService
+from furniture_ai.rendering import RenderingService, RenderPreviewRequest, RenderPreviewResult
 from furniture_ai.security import require_service_key
 
 router = APIRouter(
