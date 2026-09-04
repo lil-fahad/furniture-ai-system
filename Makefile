@@ -1,4 +1,4 @@
-.PHONY: install test lint run ui docker check audit models-check models-verify
+.PHONY: install test lint run ui docker check audit models-check models-verify style-prepare style-train
 install:
 	python -m pip install -e ".[dev,ui]"
 
@@ -23,6 +23,15 @@ models-check:
 
 models-verify:
 	python scripts/install_professional_bundle.py --verify-installed
+
+style-prepare:
+	python scripts/prepare_style_dataset.py data/styles \
+		--source-manifest data/style_sources.jsonl \
+		--output data/styles_prepared
+
+style-train:
+	python training/train_style_classifier.py data/styles_prepared \
+		--output models/style_classifier/efficientnet_b0.pth
 
 audit:
 	python scripts/scan_secrets.py
