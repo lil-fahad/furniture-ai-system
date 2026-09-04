@@ -212,6 +212,43 @@ def test_streamlit_timeout_is_reported_without_leaking_request_details(
     ]
 
 
+def test_streamlit_request_error_does_not_expose_raw_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    streamlit = FakeStreamlit(uploaded=UploadedFile(b"png-bytes"))
+
+    def post(*_: Any, **__: Any) -> Response:
+        raise RequestErrorForTest("internal host=10.0.0.7 token=private-value")
+
+    with pytest.raises(StopCalled):
+        _run_app(monkeypatch, streamlit=streamlit, post=post)
+
+    assert streamlit.errors == [
+        "The API at https://furniture.test is unreachable. Check the service and try again."
+    ]
+    assert "10.0.0.7" not in streamlit.errors[0]
+    assert "private-value" not in streamlit.errors[0]
+
+
+def test_streamlit_invalid_success_json_is_reported_without_crashing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    streamlit = FakeStreamlit(uploaded=UploadedFile(b"png-bytes"))
+    response = Response(ok=True, payload=ValueError("invalid JSON body"))
+
+    def post(*_: Any, **__: Any) -> Response:
+        return response
+
+    with pytest.raises(StopCalled):
+        _run_app(monkeypatch, streamlit=streamlit, post=post)
+
+    assert streamlit.errors == [
+        "The API returned an invalid success response. Try again later."
+    ]
+    assert streamlit.successes == []
+    assert streamlit.json_payloads == []
+
+
 def test_streamlit_non_object_error_json_falls_back_to_response_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
