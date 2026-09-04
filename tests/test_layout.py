@@ -139,3 +139,41 @@ def test_unknown_room_type_warning_is_distinct() -> None:
     assert result.placed_items == 0
     assert any("No catalog products match room type" in warning for warning in result.warnings)
     assert not any("fit inside" in warning for warning in result.warnings)
+
+
+def test_explicit_empty_catalog_is_respected() -> None:
+    floor_plan = FloorPlanAnalysis(
+        source_width=600,
+        source_height=600,
+        rooms=[_room("room-1", "living_room")],
+    )
+
+    result = furnish_floor_plan(floor_plan, catalog=[])
+
+    assert result.placed_items == 0
+    assert result.floor_plan.rooms[0].furniture == []
+
+
+@pytest.mark.parametrize("policy", ["balanced", "wall_first", "fit_first"])
+def test_each_placement_policy_is_deterministic(policy: str) -> None:
+    floor_plan = FloorPlanAnalysis(
+        source_width=600,
+        source_height=600,
+        rooms=[_room("room-1", "living_room")],
+    )
+
+    first = furnish_floor_plan(floor_plan, placement_policy=policy)
+    second = furnish_floor_plan(floor_plan, placement_policy=policy)
+
+    assert first.model_dump() == second.model_dump()
+
+
+def test_unknown_placement_policy_is_rejected() -> None:
+    floor_plan = FloorPlanAnalysis(
+        source_width=600,
+        source_height=600,
+        rooms=[_room("room-1", "living_room")],
+    )
+
+    with pytest.raises(ValueError, match="Unknown placement_policy"):
+        furnish_floor_plan(floor_plan, placement_policy="unsupported")
