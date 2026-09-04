@@ -5,8 +5,20 @@ import os
 import requests
 import streamlit as st
 
-API_URL = os.getenv("FURNITURE_API_URL", "http://127.0.0.1:8000")
+DEFAULT_API_URL = "http://127.0.0.1:8000"
+DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+API_URL = os.getenv("FURNITURE_API_URL", DEFAULT_API_URL).strip().rstrip("/") or DEFAULT_API_URL
 SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "")
+
+try:
+    MAX_UPLOAD_BYTES = int(
+        os.getenv("FURNITURE_MAX_UPLOAD_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES))
+    )
+except ValueError:
+    MAX_UPLOAD_BYTES = DEFAULT_MAX_UPLOAD_BYTES
+if MAX_UPLOAD_BYTES <= 0:
+    MAX_UPLOAD_BYTES = DEFAULT_MAX_UPLOAD_BYTES
 
 st.set_page_config(page_title="Furniture AI", layout="wide")
 st.title("Furniture AI System")
@@ -16,8 +28,6 @@ uploaded = st.file_uploader("Upload a floor plan", type=["png", "jpg", "jpeg", "
 pixels_per_cm = st.number_input("Pixels per centimetre (optional)", min_value=0.0, value=0.0)
 use_openai = st.checkbox("Use OpenAI vision refinement")
 preferences = st.text_area("Design preferences", placeholder="Modern warm style, neutral colors...")
-
-MAX_UPLOAD_BYTES = int(os.getenv("FURNITURE_MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 
 if uploaded and st.button("Analyze and furnish", type="primary"):
     payload_bytes = uploaded.getvalue()

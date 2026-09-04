@@ -130,7 +130,7 @@ def _run_app(
     post: Callable[..., Any],
     api_url: str = "https://furniture.test",
     service_key: str = "service-secret",
-    max_upload_bytes: int = 1024,
+    max_upload_bytes: int | str = 1024,
 ) -> None:
     monkeypatch.setitem(sys.modules, "streamlit", streamlit)
     monkeypatch.setitem(sys.modules, "requests", _requests_module(post))
@@ -170,6 +170,51 @@ def test_streamlit_success_request_contract(monkeypatch: pytest.MonkeyPatch) -> 
     assert streamlit.successes == ["Analysis complete"]
     assert streamlit.json_payloads == [{"analysis_id": "demo"}]
     assert streamlit.errors == []
+
+
+def test_streamlit_normalizes_trailing_api_url_slashes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    streamlit = FakeStreamlit(uploaded=UploadedFile(b"png-bytes"))
+    urls: list[str] = []
+
+    def post(url: str, **_: Any) -> Response:
+        urls.append(url)
+        return Response(ok=True, payload={"analysis_id": "demo"})
+
+    _run_app(
+        monkeypatch,
+        streamlit=streamlit,
+        post=post,
+        api_url=" https://furniture.test/// ",
+    )
+
+    assert urls == ["https://furniture.test/api/v1/analyze"]
+
+
+@pytest.mark.parametrize("invalid_limit", ["not-a-number", 0, -1])
+def test_streamlit_invalid_upload_limit_falls_back_to_safe_default(
+    monkeypatch: pytest.MonkeyPatch,
+    invalid_limit: int | str,
+) -> None:
+    streamlit = FakeStreamlit(uploaded=UploadedFile(b"png-bytes"))
+    called = False
+
+    def post(*_: Any, **__: Any) -> Response:
+        nonlocal called
+        called = True
+        return Response(ok=True, payload={"analysis_id": "demo"})
+
+    _run_app(
+        monkeypatch,
+        streamlit=streamlit,
+        post=post,
+        max_upload_bytes=invalid_limit,
+    )
+
+    assert called is True
+    assert streamlit.errors == []
+    assert streamlit.successes == ["Analysis complete"]
 
 
 def test_streamlit_rejects_oversized_upload_before_network(
