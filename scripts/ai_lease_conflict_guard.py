@@ -42,8 +42,11 @@ def bilateral_collaboration_exists(
     left_branch: str,
     right_branch: str,
     base_sha: str,
+    exact_files: list[str],
+    left_scope: str | None,
+    right_scope: str | None,
 ) -> bool:
-    """Return True only after both branches accepted the same active collaboration."""
+    """Require both ACKs and collaboration scope that covers this exact conflict."""
     state = collaboration_state(comments)
     collaborations = state.get("collaborations")
     acknowledgements = state.get("acknowledgements")
@@ -61,6 +64,17 @@ def bilateral_collaboration_exists(
             continue
         if set(split_csv(record.get("branches"))) != wanted:
             continue
+
+        shared_scope = record.get("shared_files")
+        if exact_files:
+            if not all(scope_contains_path(shared_scope, path) for path in exact_files):
+                continue
+        else:
+            if not declared_scope_overlap(shared_scope, left_scope):
+                continue
+            if not declared_scope_overlap(shared_scope, right_scope):
+                continue
+
         ack_map = acknowledgements.get(collab_id)
         if not isinstance(ack_map, dict):
             continue
@@ -104,6 +118,9 @@ def active_lease_conflicts(
             left_branch=current_branch,
             right_branch=other_branch,
             base_sha=base_sha,
+            exact_files=exact,
+            left_scope=current_lease.get("files"),
+            right_scope=other.get("files"),
         ):
             continue
         detail = ", ".join(exact[:20]) if exact else "; ".join(declared[:20])
