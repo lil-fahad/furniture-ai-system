@@ -19,12 +19,26 @@ def _load_coordination_module() -> ModuleType:
 _coordination = _load_coordination_module()
 active_leases = _coordination.active_leases
 has_coordination_override = _coordination.has_coordination_override
+lease_for_branch = _coordination.lease_for_branch
 overlap_paths = _coordination.overlap_paths
 parse_agent_record = _coordination.parse_agent_record
+pr_coordination_errors = _coordination.pr_coordination_errors
 
 
 def _comment(body: str, created_at: str) -> dict[str, str]:
     return {"body": body, "created_at": created_at}
+
+
+def _lease(branch: str = "feat/x", base_sha: str = "abc") -> dict[str, str]:
+    return {
+        "agent": "Agent X",
+        "task": "Coordination test",
+        "branch": branch,
+        "base_sha": base_sha,
+        "files": "src/example.py",
+        "lease_until": "2026-09-04T05:00:00Z",
+        "status": "active",
+    }
 
 
 def test_overlap_paths_is_deterministic() -> None:
@@ -80,3 +94,64 @@ def test_active_leases_obey_release_and_expiry() -> None:
     now = datetime(2026, 9, 4, 2, 0, tzinfo=UTC)
     leases = active_leases(comments, now=now)
     assert [lease["branch"] for lease in leases] == ["feat/c"]
+
+
+def test_lease_for_branch_requires_exact_branch() -> None:
+    leases = [_lease("feat/a"), _lease("feat/b")]
+    assert lease_for_branch(leases, "feat/b") == leases[1]
+    assert lease_for_branch(leases, "feat/missing") is None
+    assert lease_for_branch(leases, None) is None
+
+
+def test_pr_coordination_requires_active_branch_lease() -> None:
+    errors = pr_coordination_errors(
+        head_branch="feat/x",
+        base_sha="abc",
+        live_main_sha="abc",
+        leases=[],
+    )
+    assert errors == ["PR branch `feat/x` has no active AI-LEASE on issue #66"]
+
+
+def test_pr_coordination_rejects_stale_base() -> None:
+    errors = pr_coordination_errors(
+        head_branch="feat/x",
+        base_sha="old",
+        live_main_sha="new",
+        leases=[_lease(base_sha="old")],
+    )
+    assert any("current main SHA" in error for error in errors)
+
+
+def test_pr_coordination_requires_lease_renewal_after_base_update() -> None:
+    errors = pr_coordination_errors(
+        head_branch="feat/x",
+        base_sha="new",
+        live_main_sha="new",
+        leases=[_lease(base_sha="old")],
+    )
+    assert errors == [
+        "AI-LEASE base_sha does not match the PR base SHA; "
+        "renew the lease after updating the branch"
+    ]
+
+
+def test_pr_coordination_accepts_current_declared_branch() -> None:
+    errors = pr_coordination_errors(
+        head_branch="feat/x",
+        base_sha="abc",
+        live_main_sha="abc",
+        leases=[_lease()],
+    )
+    assert errors == []
+
+
+def test_coordination_workflow_runs_from_trusted_main() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github" / "workflows" / "ai-coordination.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "pull_request_target:" in workflow
+    assert "ref: main" in workflow
+    assert "persist-credentials: false" in workflow
+    assert "if: github.event_name == 'pull_request_target'" in workflow

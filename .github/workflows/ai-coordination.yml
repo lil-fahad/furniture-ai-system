@@ -1,7 +1,8 @@
 name: ai-coordination
 
 on:
-  pull_request:
+  pull_request_target:
+    branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
@@ -15,7 +16,7 @@ concurrency:
 
 jobs:
   pr-conflict-guard:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request_target'
     permissions:
       contents: read
       pull-requests: read
@@ -23,13 +24,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Checkout trusted coordination policy from main
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
+          ref: main
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.12'
-      - name: Check live multi-agent overlap
+      - name: Enforce live multi-agent coordination
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
@@ -48,6 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
+          ref: main
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
