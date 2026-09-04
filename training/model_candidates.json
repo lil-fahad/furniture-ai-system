@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "production_requires_explicit_commercial_license": true,
+    "preferred_license": "Apache-2.0",
+    "benchmark_before_replacement": true,
+    "gpu_training_only": true
+  },
+  "candidates": [
+    {
+      "id": "convnext-base-in22k-in1k",
+      "repo": "timm/convnext_base.fb_in22k_ft_in1k",
+      "loader": "hf_hub:timm/convnext_base.fb_in22k_ft_in1k",
+      "tasks": ["style-classification", "room-classification", "furniture-classification"],
+      "status": "approved-for-finetuning",
+      "license": "Apache-2.0",
+      "reason": "Strong image backbone and compatible with the repository's current ImageNet normalization, enabling a low-risk migration from EfficientNet-B0."
+    },
+    {
+      "id": "siglip2-base-image-encoder",
+      "repo": "timm/vit_base_patch16_siglip_224.v2_webli",
+      "loader": "hf_hub:timm/vit_base_patch16_siglip_224.v2_webli",
+      "tasks": ["style-classification", "room-classification", "furniture-classification", "visual-embedding"],
+      "status": "planned-after-preprocessing-adapter",
+      "license": "Apache-2.0",
+      "reason": "Higher-level semantic visual representation suitable for a shared FurnitureAI encoder; requires model-specific preprocessing validation before training."
+    },
+    {
+      "id": "rtdetr-v2-r50vd",
+      "repo": "PekingU/rtdetr_v2_r50vd",
+      "tasks": ["furniture-object-detection"],
+      "status": "planned-detector-replacement",
+      "license": "Apache-2.0",
+      "replaces": "facebook/detr-resnet-50",
+      "reason": "Real-time DETR family candidate to fine-tune on FurnitureAI's furniture taxonomy instead of relying on the fixed COCO label set."
+    },
+    {
+      "id": "grounding-dino-base",
+      "repo": "IDEA-Research/grounding-dino-base",
+      "tasks": ["open-vocabulary-detection", "pseudo-labeling"],
+      "status": "approved-as-teacher-candidate",
+      "license": "Apache-2.0",
+      "reason": "Use as an offline teacher to bootstrap labels and discover furniture concepts outside a closed detector taxonomy, not as the default production detector."
+    },
+    {
+      "id": "sam2-1-hiera-tiny",
+      "repo": "facebook/sam2.1-hiera-tiny",
+      "tasks": ["promptable-segmentation"],
+      "status": "keep-current-runtime-model",
+      "license": "Apache-2.0",
+      "reason": "Already present in the professional bundle and remains the lightweight runtime segmentation component."
+    },
+    {
+      "id": "sam2-hiera-base-plus",
+      "repo": "facebook/sam2-hiera-base-plus",
+      "tasks": ["promptable-segmentation", "offline-refinement"],
+      "status": "benchmark-only",
+      "license": "Apache-2.0",
+      "reason": "Potential higher-quality teacher/refinement model; adopt only if segmentation quality gain justifies higher VRAM and latency."
+    },
+    {
+      "id": "depth-anything-v2-small",
+      "repo": "depth-anything/Depth-Anything-V2-Small-hf",
+      "tasks": ["monocular-depth-estimation"],
+      "status": "keep-current-model",
+      "license": "Apache-2.0",
+      "reason": "Already fills the relative-depth role; retraining is not justified until FurnitureAI has calibrated metric-depth supervision."
+    },
+    {
+      "id": "segformer-b2-ade-512",
+      "repo": "nvidia/segformer-b2-finetuned-ade-512-512",
+      "tasks": ["floor-plan-segmentation"],
+      "status": "blocked-license-review",
+      "license": "other",
+      "reason": "Architecture is attractive for replacing SmallUNet, but pretrained weights must not enter the production pipeline until license terms are explicitly cleared."
+    },
+    {
+      "id": "mask2former-cubicassa",
+      "repo": "phungpx/mask2former-swin-base-cubicassa",
+      "tasks": ["floor-plan-segmentation"],
+      "status": "blocked-license-review",
+      "license": "other",
+      "reason": "Task-specific floor-plan checkpoint is useful as a research reference, but its published license is not explicit enough for production use."
+    }
+  ]
+}

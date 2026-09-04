@@ -13,7 +13,8 @@ import timm
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
-from torchvision import datasets
+from torchvision import datasets, transforms
+from torchvision.transforms import InterpolationMode
 
 from training import train_room_classifier as room
 from training import train_style_classifier as style
@@ -59,18 +60,102 @@ def atomic_json_save(payload: dict[str, object], path: Path) -> None:
     os.replace(temporary, path)
 
 
-def build_model(model_name: str, classes: int, pretrained: bool) -> nn.Module:
+def build_model(
+    model_name: str,
+    classes: int,
+    pretrained: bool,
+    allow_random_init: bool,
+) -> nn.Module:
     try:
         return timm.create_model(model_name, pretrained=pretrained, num_classes=classes)
-    except (OSError, RuntimeError) as exc:
-        if not pretrained:
-            raise
+    except (OSError, RuntimeError, ValueError) as exc:
+        if not pretrained or not allow_random_init:
+            raise RuntimeError(
+                f"Unable to load requested pretrained backbone {model_name!r}. "
+                "Training is intentionally blocked instead of silently using random weights. "
+                "Use --allow-random-init only for controlled experiments."
+            ) from exc
         print(
-            "WARNING: pretrained weights unavailable; using random initialization "
-            f"({exc.__class__.__name__}: {exc})",
+            "WARNING: pretrained weights unavailable; explicitly falling back to random "
+            f"initialization ({exc.__class__.__name__}: {exc})",
             flush=True,
         )
         return timm.create_model(model_name, pretrained=False, num_classes=classes)
+
+
+def model_preprocessing(model: nn.Module, requested_size: int | None) -> dict[str, object]:
+    config = timm.data.resolve_model_data_config(model)
+    input_size = config.get("input_size", (3, 224, 224))
+    if not isinstance(input_size, (tuple, list)) or len(input_size) != 3:
+        input_size = (3, 224, 224)
+    native_size = int(input_size[-1])
+    image_size = int(requested_size or native_size)
+    mean = [float(value) for value in config.get("mean", style.IMAGENET_MEAN)]
+    std = [float(value) for value in config.get("std", style.IMAGENET_STD)]
+    crop_pct = float(config.get("crop_pct", 0.875) or 0.875)
+    interpolation = str(config.get("interpolation", "bicubic")).lower()
+    return {
+        "image_size": image_size,
+        "native_image_size": native_size,
+        "mean": mean,
+        "std": std,
+        "crop_pct": crop_pct,
+        "interpolation": interpolation,
+    }
+
+
+def interpolation_mode(name: str) -> InterpolationMode:
+    mapping = {
+        "nearest": InterpolationMode.NEAREST,
+        "bilinear": InterpolationMode.BILINEAR,
+        "bicubic": InterpolationMode.BICUBIC,
+        "box": InterpolationMode.BOX,
+        "hamming": InterpolationMode.HAMMING,
+        "lanczos": InterpolationMode.LANCZOS,
+    }
+    return mapping.get(name.lower(), InterpolationMode.BICUBIC)
+
+
+def build_adaptive_transforms(
+    mode: str,
+    preprocessing: dict[str, object],
+) -> tuple[transforms.Compose, transforms.Compose]:
+    image_size = int(preprocessing["image_size"])
+    mean = [float(value) for value in preprocessing["mean"]]
+    std = [float(value) for value in preprocessing["std"]]
+    interpolation = interpolation_mode(str(preprocessing["interpolation"]))
+    crop_pct = float(preprocessing["crop_pct"])
+    resize_size = max(image_size, round(image_size / max(crop_pct, 1e-6)))
+    crop_scale = (0.70, 1.0) if mode == "style" else (0.75, 1.0)
+
+    training = transforms.Compose(
+        [
+            transforms.RandomResizedCrop(
+                image_size,
+                scale=crop_scale,
+                interpolation=interpolation,
+                antialias=True,
+            ),
+            transforms.RandomHorizontalFlip(),
+            transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.10),
+            transforms.RandomGrayscale(p=0.03 if mode == "style" else 0.0),
+            transforms.ToTensor(),
+            transforms.Normalize(mean, std),
+        ]
+    )
+    evaluation = transforms.Compose(
+        [
+            transforms.Resize(resize_size, interpolation=interpolation, antialias=True),
+            transforms.CenterCrop(image_size),
+            transforms.ToTensor(),
+            transforms.Normalize(mean, std),
+        ]
+    )
+    return training, evaluation
+
+
+def preprocessing_signature(preprocessing: dict[str, object]) -> str:
+    return json.dumps(preprocessing, sort_keys=True, separators=(",", ":"))
 
 
 def loader_options(num_workers: int, device: torch.device) -> dict[str, object]:
@@ -115,8 +200,31 @@ def make_train_loader(
     )
 
 
+def discover_classes(args: argparse.Namespace) -> tuple[list[str], dict[str, object]]:
+    if args.mode == "style":
+        quality = style.load_quality_metadata(args.data, args.allow_unversioned_data)
+        index_dataset = datasets.ImageFolder(args.data / "train")
+        if not index_dataset.classes:
+            raise ValueError("style training data has no class directories")
+        return list(index_dataset.classes), quality
+
+    index_dataset = datasets.ImageFolder(args.data)
+    if len(index_dataset) < args.min_images:
+        raise ValueError(
+            f"At least {args.min_images} labeled images are required "
+            f"(found {len(index_dataset)})"
+        )
+    return (
+        list(index_dataset.classes),
+        {"dataset_fingerprint": None, "manifest_sha256": None},
+    )
+
+
 def prepare_style_data(
     args: argparse.Namespace,
+    train_transform: transforms.Compose,
+    eval_transform: transforms.Compose,
+    quality: dict[str, object],
 ) -> tuple[
     torch.utils.data.Dataset,
     torch.utils.data.Dataset,
@@ -125,8 +233,6 @@ def prepare_style_data(
     list[str],
     dict[str, object],
 ]:
-    quality = style.load_quality_metadata(args.data, args.allow_unversioned_data)
-    train_transform, eval_transform = style.build_transforms(args.img_size)
     train_set, validation_set, test_set = style.imagefolder_splits(
         args.data, train_transform, eval_transform
     )
@@ -142,6 +248,9 @@ def prepare_style_data(
 
 def prepare_room_data(
     args: argparse.Namespace,
+    train_transform: transforms.Compose,
+    eval_transform: transforms.Compose,
+    quality: dict[str, object],
 ) -> tuple[
     torch.utils.data.Dataset,
     torch.utils.data.Dataset,
@@ -150,13 +259,7 @@ def prepare_room_data(
     list[str],
     dict[str, object],
 ]:
-    train_transform, validation_transform = room.build_transforms(args.img_size)
     index_dataset = datasets.ImageFolder(args.data)
-    if len(index_dataset) < args.min_images:
-        raise ValueError(
-            f"At least {args.min_images} labeled images are required "
-            f"(found {len(index_dataset)})"
-        )
     selected = list(range(len(index_dataset)))
     if args.limit is not None:
         selected = room.balanced_limit_indices(index_dataset.targets, args.limit, args.seed)
@@ -167,7 +270,7 @@ def prepare_room_data(
     train_indices = [selected[index] for index in train_relative]
     validation_indices = [selected[index] for index in validation_relative]
     train_dataset = datasets.ImageFolder(args.data, transform=train_transform)
-    validation_dataset = datasets.ImageFolder(args.data, transform=validation_transform)
+    validation_dataset = datasets.ImageFolder(args.data, transform=eval_transform)
     train_set = Subset(train_dataset, train_indices)
     validation_set = Subset(validation_dataset, validation_indices)
     targets = [index_dataset.targets[index] for index in train_indices]
@@ -177,7 +280,7 @@ def prepare_room_data(
         None,
         targets,
         list(index_dataset.classes),
-        {"dataset_fingerprint": None, "manifest_sha256": None},
+        quality,
     )
 
 
@@ -223,7 +326,7 @@ def resume_payload(
     mode: str,
     architecture: str,
     classes: list[str],
-    image_size: int,
+    preprocessing: dict[str, object],
     dataset_fingerprint: object,
     epoch: int,
     batch_in_epoch: int,
@@ -234,11 +337,13 @@ def resume_payload(
     loss_batches: int,
 ) -> dict[str, object]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": mode,
         "architecture": architecture,
         "classes": classes,
-        "image_size": image_size,
+        "image_size": int(preprocessing["image_size"]),
+        "preprocessing": preprocessing,
+        "preprocessing_signature": preprocessing_signature(preprocessing),
         "dataset_fingerprint": dataset_fingerprint,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
@@ -259,6 +364,7 @@ def validate_resume(
     args: argparse.Namespace,
     classes: list[str],
     quality: dict[str, object],
+    preprocessing: dict[str, object],
 ) -> None:
     if payload.get("mode") != args.mode:
         raise ValueError("resume checkpoint mode does not match --mode")
@@ -266,8 +372,13 @@ def validate_resume(
         raise ValueError("resume checkpoint architecture does not match --model-name")
     if payload.get("classes") != classes:
         raise ValueError("resume checkpoint classes do not match the current dataset")
-    if int(payload.get("image_size", args.img_size)) != args.img_size:
-        raise ValueError("resume checkpoint image size does not match --img-size")
+    if int(payload.get("image_size", preprocessing["image_size"])) != int(
+        preprocessing["image_size"]
+    ):
+        raise ValueError("resume checkpoint image size does not match model preprocessing")
+    stored_signature = payload.get("preprocessing_signature")
+    if stored_signature is not None and stored_signature != preprocessing_signature(preprocessing):
+        raise ValueError("resume checkpoint preprocessing does not match the current backbone")
     expected = quality.get("dataset_fingerprint")
     actual = payload.get("dataset_fingerprint")
     if expected is not None and actual != expected:
@@ -279,6 +390,7 @@ def save_best_checkpoint(
     model: nn.Module,
     classes: list[str],
     quality: dict[str, object],
+    preprocessing: dict[str, object],
     precision_name: str,
     metric_name: str,
     validation: dict[str, object],
@@ -289,11 +401,16 @@ def save_best_checkpoint(
     targets: list[int],
 ) -> None:
     payload: dict[str, object] = {
+        "schema_version": 2,
         "model_state_dict": model.state_dict(),
         "classes": classes,
         "architecture": args.model_name,
-        "image_size": args.img_size,
-        "normalization": {"mean": style.IMAGENET_MEAN, "std": style.IMAGENET_STD},
+        "image_size": int(preprocessing["image_size"]),
+        "preprocessing": preprocessing,
+        "normalization": {
+            "mean": preprocessing["mean"],
+            "std": preprocessing["std"],
+        },
         "seed": args.seed,
         "precision": precision_name,
         "class_balance": args.class_balance,
@@ -326,13 +443,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     parser.add_argument("--precision", choices=("auto", "fp32", "fp16", "bf16"), default="auto")
-    parser.add_argument("--img-size", type=int, default=224)
+    parser.add_argument(
+        "--img-size",
+        type=int,
+        default=None,
+        help="Override the backbone's native square input size. Default: model data config.",
+    )
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
     parser.add_argument("--class-balance", choices=("none", "sampler"), default="sampler")
     parser.add_argument("--early-stopping-patience", type=int, default=5)
     parser.add_argument("--label-smoothing", type=float, default=0.1)
     parser.add_argument("--no-pretrained", dest="pretrained", action="store_false", default=True)
+    parser.add_argument(
+        "--allow-random-init",
+        action="store_true",
+        help="Allow an explicit fallback to random weights if pretrained loading fails.",
+    )
     parser.add_argument("--no-tf32", dest="tf32", action="store_false", default=True)
     parser.add_argument("--allow-unversioned-data", action="store_true")
     parser.add_argument("--validation-fraction", type=float, default=0.2)
@@ -341,6 +468,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.epochs < 1 or args.batch_size < 1:
         parser.error("--epochs and --batch-size must be at least 1")
+    if args.img_size is not None and args.img_size < 32:
+        parser.error("--img-size must be at least 32")
     if args.num_workers < 0:
         parser.error("--num-workers cannot be negative")
     if args.gradient_accumulation_steps < 1:
@@ -368,10 +497,27 @@ def main() -> int:
         torch.backends.cudnn.allow_tf32 = args.tf32
         torch.set_float32_matmul_precision("high")
 
+    discovered_classes, quality = discover_classes(args)
+    model = build_model(
+        args.model_name,
+        len(discovered_classes),
+        args.pretrained,
+        args.allow_random_init,
+    )
+    preprocessing = model_preprocessing(model, args.img_size)
+    train_transform, eval_transform = build_adaptive_transforms(args.mode, preprocessing)
+
     if args.mode == "style":
-        train_set, validation_set, test_set, targets, classes, quality = prepare_style_data(args)
+        train_set, validation_set, test_set, targets, classes, quality = prepare_style_data(
+            args, train_transform, eval_transform, quality
+        )
     else:
-        train_set, validation_set, test_set, targets, classes, quality = prepare_room_data(args)
+        train_set, validation_set, test_set, targets, classes, quality = prepare_room_data(
+            args, train_transform, eval_transform, quality
+        )
+
+    if classes != discovered_classes:
+        raise ValueError("dataset classes changed while the training pipeline was being prepared")
 
     validation_loader = DataLoader(
         validation_set,
@@ -388,9 +534,7 @@ def main() -> int:
             **loader_options(args.num_workers, device),
         )
 
-    model = build_model(args.model_name, len(classes), args.pretrained).to(device)
-    if device.type == "cuda":
-        model = model.to(memory_format=torch.channels_last)
+    model = model.to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
     )
@@ -411,7 +555,7 @@ def main() -> int:
         payload = torch.load(args.resume, map_location="cpu", weights_only=False)
         if not isinstance(payload, dict):
             raise ValueError("resume checkpoint must contain a mapping")
-        validate_resume(payload, args, classes, quality)
+        validate_resume(payload, args, classes, quality, preprocessing)
         model.load_state_dict(payload["model_state_dict"])
         optimizer.load_state_dict(payload["optimizer_state_dict"])
         scheduler.load_state_dict(payload["scheduler_state_dict"])
@@ -431,9 +575,11 @@ def main() -> int:
 
     metric_name = "validation_macro_f1" if args.mode == "style" else "validation_accuracy"
     print(
-        f"mode={args.mode} device={device} precision={precision_name} classes={len(classes)} "
-        f"train={len(train_set)} validation={len(validation_set)} "
-        f"test={len(test_set) if test_set is not None else 0}",
+        f"mode={args.mode} backbone={args.model_name} device={device} precision={precision_name} "
+        f"classes={len(classes)} train={len(train_set)} validation={len(validation_set)} "
+        f"test={len(test_set) if test_set is not None else 0} "
+        f"image_size={preprocessing['image_size']} mean={preprocessing['mean']} "
+        f"std={preprocessing['std']}",
         flush=True,
     )
 
@@ -490,7 +636,7 @@ def main() -> int:
                             mode=args.mode,
                             architecture=args.model_name,
                             classes=classes,
-                            image_size=args.img_size,
+                            preprocessing=preprocessing,
                             dataset_fingerprint=quality.get("dataset_fingerprint"),
                             epoch=epoch,
                             batch_in_epoch=step,
@@ -535,6 +681,7 @@ def main() -> int:
                 model,
                 classes,
                 quality,
+                preprocessing,
                 precision_name,
                 metric_name,
                 validation,
@@ -556,7 +703,7 @@ def main() -> int:
                 mode=args.mode,
                 architecture=args.model_name,
                 classes=classes,
-                image_size=args.img_size,
+                preprocessing=preprocessing,
                 dataset_fingerprint=quality.get("dataset_fingerprint"),
                 epoch=epoch + 1,
                 batch_in_epoch=0,
@@ -592,12 +739,13 @@ def main() -> int:
         checkpoint["best_epoch"] = best_epoch
         atomic_torch_save(checkpoint, args.output)
         report = {
-            "version": 2,
+            "version": 3,
             "checkpoint": str(args.output),
             "checkpoint_sha256": style.sha256_file(args.output),
             "architecture": args.model_name,
             "classes": classes,
-            "image_size": args.img_size,
+            "image_size": int(preprocessing["image_size"]),
+            "preprocessing": preprocessing,
             "dataset_fingerprint": quality.get("dataset_fingerprint"),
             "dataset_manifest_sha256": quality.get("manifest_sha256"),
             "selection_metric": metric_name,
