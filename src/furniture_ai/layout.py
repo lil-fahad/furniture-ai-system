@@ -173,7 +173,9 @@ def furnish_floor_plan(
     """
     if placement_policy not in VALID_PLACEMENT_POLICIES:
         allowed = ", ".join(sorted(VALID_PLACEMENT_POLICIES))
-        raise ValueError(f"Unknown placement_policy {placement_policy!r}; expected one of: {allowed}")
+        raise ValueError(
+            f"Unknown placement_policy {placement_policy!r}; expected one of: {allowed}"
+        )
 
     active_catalog = catalog or load_catalog()
     override = room_type_overrides or {}
