@@ -13,6 +13,14 @@ from furniture_ai.contracts import (
     SceneAnalysis,
     SceneObject,
 )
+from furniture_ai.nvidia_acceleration import (
+    NvidiaAccelerationUnavailable,
+    NvidiaRuntimeProfile,
+    Precision,
+    inference_context,
+    prepare_model,
+    resolve_nvidia_runtime,
+)
 
 
 class ProfessionalVisionUnavailable(RuntimeError):
@@ -34,22 +42,8 @@ def _require_model_dir(root: Path, name: str) -> Path:
     return model_dir
 
 
-def _resolve_device(requested: str | None = None) -> str:
-    try:
-        import torch
-    except ImportError as exc:
-        raise ProfessionalVisionUnavailable(
-            "Install the professional extra to use local Hugging Face vision models"
-        ) from exc
-    if requested and requested.startswith("cuda") and not torch.cuda.is_available():
-        raise ProfessionalVisionUnavailable("CUDA was requested but is not available")
-    if requested:
-        return requested
-    return "cuda" if torch.cuda.is_available() else "cpu"
-
-
-@lru_cache(maxsize=4)
-def _load_detector(model_dir: str, device: str) -> tuple[Any, Any]:
+@lru_cache(maxsize=8)
+def _load_detector(model_dir: str, profile: NvidiaRuntimeProfile) -> tuple[Any, Any]:
     try:
         from transformers import AutoImageProcessor, AutoModelForObjectDetection
     except ImportError as exc:
@@ -59,13 +53,12 @@ def _load_detector(model_dir: str, device: str) -> tuple[Any, Any]:
 
     processor = AutoImageProcessor.from_pretrained(model_dir, local_files_only=True)
     model = AutoModelForObjectDetection.from_pretrained(model_dir, local_files_only=True)
-    model.to(device)
-    model.eval()
+    model = prepare_model(model, profile)
     return processor, model
 
 
-@lru_cache(maxsize=4)
-def _load_depth_model(model_dir: str, device: str) -> tuple[Any, Any]:
+@lru_cache(maxsize=8)
+def _load_depth_model(model_dir: str, profile: NvidiaRuntimeProfile) -> tuple[Any, Any]:
     try:
         from transformers import AutoImageProcessor, AutoModelForDepthEstimation
     except ImportError as exc:
@@ -75,8 +68,7 @@ def _load_depth_model(model_dir: str, device: str) -> tuple[Any, Any]:
 
     processor = AutoImageProcessor.from_pretrained(model_dir, local_files_only=True)
     model = AutoModelForDepthEstimation.from_pretrained(model_dir, local_files_only=True)
-    model.to(device)
-    model.eval()
+    model = prepare_model(model, profile)
     return processor, model
 
 
@@ -110,16 +102,35 @@ def relative_depth_summary(depth: np.ndarray) -> RelativeDepthSummary:
 
 
 class ProfessionalVisionService:
-    """Offline scene analysis using the verified local Hugging Face bundle."""
+    """Offline scene analysis with optional NVIDIA CUDA acceleration."""
 
     DETECTOR_ID = "facebook/detr-resnet-50"
     DEPTH_ID = "depth-anything/Depth-Anything-V2-Small-hf"
 
-    def __init__(self, models_root: Path, *, device: str | None = None) -> None:
+    def __init__(
+        self,
+        models_root: Path,
+        *,
+        device: str | None = None,
+        precision: Precision = "auto",
+        enable_torch_compile: bool = False,
+    ) -> None:
         self.models_root = Path(models_root)
         self.detector_dir = _require_model_dir(self.models_root, "detr_resnet50")
         self.depth_dir = _require_model_dir(self.models_root, "depth_anything_v2_small")
-        self.device = _resolve_device(device)
+        try:
+            self.runtime = resolve_nvidia_runtime(
+                device,
+                precision=precision,
+                enable_torch_compile=enable_torch_compile,
+            )
+        except NvidiaAccelerationUnavailable as exc:
+            raise ProfessionalVisionUnavailable(str(exc)) from exc
+        self.device = self.runtime.device
+
+    @property
+    def runtime_info(self) -> dict[str, object]:
+        return self.runtime.as_public_dict()
 
     def _detect(self, image: Image.Image, threshold: float) -> list[SceneObject]:
         try:
@@ -127,10 +138,10 @@ class ProfessionalVisionService:
         except ImportError as exc:
             raise ProfessionalVisionUnavailable("PyTorch is required for object detection") from exc
 
-        processor, model = _load_detector(str(self.detector_dir), self.device)
+        processor, model = _load_detector(str(self.detector_dir), self.runtime)
         processed = processor(images=image.convert("RGB"), return_tensors="pt")
         inputs = _move_inputs(processed, self.device)
-        with torch.inference_mode():
+        with inference_context(self.runtime):
             outputs = model(**inputs)
         target_sizes = torch.tensor([[image.height, image.width]], device=self.device)
         result = processor.post_process_object_detection(
@@ -162,15 +173,14 @@ class ProfessionalVisionService:
 
     def _depth(self, image: Image.Image) -> RelativeDepthSummary:
         try:
-            import torch
             import torch.nn.functional as functional
         except ImportError as exc:
             raise ProfessionalVisionUnavailable("PyTorch is required for depth estimation") from exc
 
-        processor, model = _load_depth_model(str(self.depth_dir), self.device)
+        processor, model = _load_depth_model(str(self.depth_dir), self.runtime)
         processed = processor(images=image.convert("RGB"), return_tensors="pt")
         inputs = _move_inputs(processed, self.device)
-        with torch.inference_mode():
+        with inference_context(self.runtime):
             outputs = model(**inputs)
         predicted = outputs.predicted_depth
         resized = functional.interpolate(

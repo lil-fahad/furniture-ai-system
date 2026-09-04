@@ -94,8 +94,13 @@ def test_scene_endpoint_without_loading_real_models(monkeypatch) -> None:
     from furniture_ai.contracts import RelativeDepthSummary, SceneAnalysis
 
     class FakeVisionService:
-        def __init__(self, models_root) -> None:
+        def __init__(self, models_root, **kwargs) -> None:
             self.models_root = models_root
+            assert kwargs == {
+                "device": None,
+                "precision": "auto",
+                "enable_torch_compile": False,
+            }
 
         def analyze(self, image, *, detection_threshold, include_depth):
             assert detection_threshold == 0.6
@@ -125,7 +130,7 @@ def test_scene_endpoint_reports_missing_professional_bundle(monkeypatch) -> None
     from furniture_ai.professional_vision import ProfessionalVisionUnavailable
 
     class MissingVisionService:
-        def __init__(self, models_root) -> None:
+        def __init__(self, models_root, **kwargs) -> None:
             raise ProfessionalVisionUnavailable("professional bundle missing")
 
     monkeypatch.setattr(api, "ProfessionalVisionService", MissingVisionService)
