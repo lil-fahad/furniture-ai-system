@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import runpy
-
-
-MODULE = runpy.run_path("scripts/benchmark_nvidia_vision.py")
-percentile = MODULE["percentile"]
+from scripts.benchmark_nvidia_vision import percentile
 
 
 def test_percentile_handles_empty_and_single_value() -> None:
