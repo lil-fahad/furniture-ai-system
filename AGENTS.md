@@ -9,18 +9,22 @@ https://github.com/lil-fahad/furniture-ai-system/issues/66
 
 Do not infer active workers from the GitHub account name. Multiple AI systems may operate through the same account. An agent is considered active only when it has an unexpired `AI-LEASE` on issue #66.
 
-## Required preflight
+## Mandatory entry protocol — read the whole project first
 
-Before changing any file:
+**No AI may edit code immediately after entering the project.** Every new AI session/agent must first build a complete repository map and understand the live parallel work.
 
-1. Fetch the latest `main` and record its SHA.
-2. Read issue #66 and its newest comments.
-3. Run, when available:
+Before changing any file, the agent must:
+
+1. Fetch the exact latest `main` SHA and use that SHA as the project baseline.
+2. Read this `AGENTS.md`, `README.md`, `SECURITY.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `docs/AI_COORDINATION.md`, all workflow files under `.github/workflows/`, and the repository tree recursively.
+3. Inspect **every tracked project path** in the recursive tree. Read all human-readable source/config/docs/test files relevant to understanding architecture, contracts, training, data/provenance, deployment, security, CI, and the intended task. Large/binary/model/data artifacts must at minimum be inventoried by path/metadata; do not pretend to have semantically read opaque binary bytes.
+4. Read issue #66 and its newest comments, then run when available:
    `python scripts/ai_coordination.py snapshot --repo lil-fahad/furniture-ai-system`
-4. Inspect open PRs and their changed files.
-5. Create a task branch from the exact current `main` SHA.
-6. Register an `AI-LEASE` comment on issue #66 with agent/tool name, task, branch, base SHA, file scope, expiry, and `status: active` **before editing**.
-7. If another unexpired lease or non-draft PR overlaps the intended files, do not begin conflicting edits until the scope is coordinated.
+5. From the live snapshot, explicitly determine: current `main`, `active_agent_count`, each active agent identity, task, branch, base SHA and file scope, every open PR, and every detected overlap/conflict.
+6. Inspect changed files for all open PRs that are active, non-draft, undeclared, or potentially related to the intended task. Do not rely only on PR titles.
+7. Only after steps 1–6, choose a task branch from the exact current `main` SHA and register an `AI-LEASE` on issue #66 **before editing**.
+
+If the tool cannot access enough repository state to complete this preflight, it must stop and report the missing visibility instead of editing from assumptions.
 
 ## Lease format
 
@@ -47,7 +51,7 @@ status: completed|abandoned
 result: <PR/commit or explanation>
 ```
 
-## Conflict and merge rules
+## Conflict means collaborate, not overwrite
 
 - Never push coding work directly to `main`; use a task branch and PR.
 - Every PR must have an active lease whose `branch` exactly matches the PR head branch.
@@ -55,11 +59,29 @@ result: <PR/commit or explanation>
 - One active task owns a file scope at a time unless the owners explicitly coordinate.
 - A non-draft PR must not silently overlap another non-draft PR. The AI coordination CI guard treats this as a conflict.
 - Draft PR overlaps are warnings, not authorization to overwrite another branch.
-- A deliberate file overlap may use `Coordination-Override: #<other PR>` only after the owners record the coordination decision on issue #66. The override never bypasses lease or current-main requirements.
-- Before merging, re-check the live main SHA, PR mergeability, required CI, the coordination board, and overlapping PRs.
-- If `main` advances, update/rebuild the branch, renew its lease, and rerun exact-head CI.
+- When two agents need the same file or coupled subsystem, neither agent may independently overwrite or supersede the other. They must record a shared `AI-COLLAB` decision on issue #66 containing both branches/agents, the overlapping files, integration owner, review/test plan, and both agents' acknowledgement references.
+- `Coordination-Override: #<other PR>` is valid only when issue #66 contains a matching acknowledged `AI-COLLAB` record. The guard must fail closed if the PR merely contains the override text without the board evidence.
+- Collaborative overlap requires joint review of the combined diff plus the relevant unit/integration/regression tests. Passing Git mergeability alone is not proof that the combined behavior is correct.
+- Before merging, re-check live `main`, active agents, PR mergeability, exact-head CI, the coordination board, and overlaps. If `main` advances, rebuild/update, renew the lease, and rerun exact-head CI.
 - Do not close, rewrite, or supersede another agent's work without recording the decision on issue #66.
 - Never use a manual merge to bypass a failed coordination check.
+
+### Collaboration record
+
+```text
+AI-COLLAB
+agents: <agent A> | <agent B>
+branches: <branch A> | <branch B>
+prs: #<A> | #<B>
+files: <overlapping paths>
+integration_owner: <agent/branch responsible for combined branch>
+plan: <how the implementations will be reconciled>
+tests: <joint tests/CI required before merge>
+ack: <explicit acknowledgement identifiers from both sides>
+status: active
+```
+
+The collaboration record is not permission to skip tests or stale-base rules. It only authorizes a deliberate overlap after both pieces of work have been inspected together.
 
 ## Trusted guard execution
 
@@ -69,7 +91,7 @@ For hard enforcement at the GitHub merge-button level, repository settings shoul
 
 ## Current status
 
-Never copy a static "current agent" list from this file. Use issue #66 or the `snapshot` command. They show the latest `main` SHA, active leases, open work, whether each open PR has a declared lease, and overlap/staleness information.
+Never copy a static current-agent list from this file. Use issue #66 or `python scripts/ai_coordination.py snapshot --repo lil-fahad/furniture-ai-system`. The snapshot must report the live active-agent count and work inventory every time an AI enters.
 
 ## Agent-specific instruction files
 
