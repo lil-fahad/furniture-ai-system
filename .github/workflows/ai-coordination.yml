@@ -39,6 +39,13 @@ jobs:
           python scripts/ai_coordination.py check-pr
           --repo "$GITHUB_REPOSITORY"
           --pr "${{ github.event.pull_request.number }}"
+      - name: Enforce active leases even before peer PR creation
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          python scripts/ai_lease_conflict_guard.py
+          --repo "$GITHUB_REPOSITORY"
+          --pr "${{ github.event.pull_request.number }}"
 
   publish-main-update:
     if: github.event_name == 'push'
