@@ -5,7 +5,7 @@ import base64
 from fastapi.testclient import TestClient
 
 from furniture_ai.api_entry import app
-from furniture_ai.contracts import FloorPlanAnalysis, Point, Room
+from furniture_ai.contracts import FloorPlanAnalysis, Opening, OpeningKind, Point, Room
 from furniture_ai.layout import furnish_floor_plan
 from furniture_ai.rendering import (
     PromptCompiler,
@@ -32,11 +32,19 @@ def _design():
                 area=425_600,
             )
         ],
+        openings=[
+            Opening(
+                id="door-1",
+                kind=OpeningKind.DOOR,
+                start=Point(x=20, y=240),
+                end=Point(x=20, y=330),
+            )
+        ],
     )
     return furnish_floor_plan(floor_plan)
 
 
-def test_scene_compiler_grounds_catalog_products_and_normalizes_style() -> None:
+def test_scene_compiler_grounds_catalog_products_openings_and_style() -> None:
     scene = SceneCompiler().compile(
         _design(),
         style="  warm   modern   minimal  ",
@@ -49,6 +57,9 @@ def test_scene_compiler_grounds_catalog_products_and_normalizes_style() -> None:
     product_ids = {item.product_id for item in scene.rooms[0].furniture}
     assert {"sofa-3-seat", "coffee-table", "tv-unit"}.issubset(product_ids)
     assert all(item.product_name for item in scene.rooms[0].furniture)
+    assert len(scene.openings) == 1
+    assert scene.openings[0].id == "door-1"
+    assert scene.openings[0].kind is OpeningKind.DOOR
 
 
 def test_prompt_compiler_is_deterministic_and_grounding_first() -> None:
@@ -62,6 +73,7 @@ def test_prompt_compiler_is_deterministic_and_grounding_first() -> None:
     assert len(first.scene_fingerprint) == 64
     assert "Preserve the supplied room geometry" in first.positive_prompt
     assert "Three-seat sofa" in first.positive_prompt
+    assert "door door-1" in first.positive_prompt
     assert "do not move, remove, or duplicate grounded furniture" in first.negative_prompt
 
 
@@ -78,6 +90,7 @@ def test_mock_renderer_returns_visual_svg_without_claiming_photorealism() -> Non
     svg = base64.b64decode(result.artifact.data_uri[len(prefix) :]).decode("utf-8")
     assert svg.startswith("<svg")
     assert "Three-seat sofa" in svg
+    assert 'data-kind="door"' in svg
     assert result.warnings
 
 
@@ -98,6 +111,7 @@ def test_v2_render_preview_endpoint_returns_grounded_scene_and_artifact() -> Non
     assert payload["photorealistic"] is False
     assert payload["scene"]["style"] == "japandi natural"
     assert payload["scene"]["rooms"][0]["furniture"]
+    assert payload["scene"]["openings"][0]["kind"] == "door"
     assert payload["artifact"]["backend"] == "mock"
     assert payload["artifact"]["data_uri"].startswith("data:image/svg+xml;base64,")
 
