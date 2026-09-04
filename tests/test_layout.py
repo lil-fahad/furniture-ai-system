@@ -83,6 +83,18 @@ def test_room_polygon_rejects_collinear_points() -> None:
         room_polygon([Point(x=0, y=0), Point(x=1, y=1), Point(x=2, y=2)])
 
 
+def test_room_polygon_rejects_self_intersection_instead_of_repairing() -> None:
+    points = [
+        Point(x=0, y=0),
+        Point(x=10, y=10),
+        Point(x=0, y=10),
+        Point(x=10, y=0),
+    ]
+
+    with pytest.raises(ValueError, match="simple \(non-self-intersecting\)"):
+        room_polygon(points)
+
+
 def test_room_polygon_rejects_too_few_points() -> None:
     with pytest.raises(ValueError, match="at least three"):
         room_polygon([Point(x=0, y=0), Point(x=1, y=1)])
