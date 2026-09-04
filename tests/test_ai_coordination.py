@@ -131,7 +131,8 @@ def test_pr_coordination_requires_lease_renewal_after_base_update() -> None:
         leases=[_lease(base_sha="old")],
     )
     assert errors == [
-        "AI-LEASE base_sha does not match the PR base SHA; renew the lease after updating the branch"
+        "AI-LEASE base_sha does not match the PR base SHA; "
+        "renew the lease after updating the branch"
     ]
 
 
