@@ -122,6 +122,7 @@ def run_quantization(
     source = Path(onnx)
     calibration = Path(calibration_data)
     destination = Path(output)
+    manifest_path = Path(manifest) if manifest else destination.with_suffix(destination.suffix + ".json")
     if not source.is_file():
         raise FileNotFoundError(source)
     if source.stat().st_size == 0:
@@ -132,8 +133,16 @@ def run_quantization(
     resolved_source = source.resolve()
     resolved_calibration = calibration.resolve()
     resolved_output = destination.resolve()
-    if resolved_output in {resolved_source, resolved_calibration}:
+    resolved_manifest = manifest_path.resolve()
+    protected_inputs = {resolved_source, resolved_calibration}
+    if resolved_output in protected_inputs:
         raise ValueError("Output path must differ from source ONNX and calibration data")
+    if resolved_manifest in protected_inputs | {resolved_output}:
+        raise ValueError("Manifest path must differ from source, calibration, and output paths")
+    if destination.exists():
+        raise FileExistsError(f"Refusing to reuse existing output: {destination}")
+    if manifest_path.exists():
+        raise FileExistsError(f"Refusing to overwrite existing manifest: {manifest_path}")
 
     loaded_calibration, calibration_metadata = load_calibration_data(calibration)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -178,9 +187,8 @@ def run_quantization(
         ),
     }
 
-    manifest_path = manifest or destination.with_suffix(destination.suffix + ".json")
-    Path(manifest_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(manifest_path).write_text(
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
