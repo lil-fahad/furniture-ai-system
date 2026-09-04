@@ -59,6 +59,9 @@ def test_connections_are_closed_after_each_operation(
     store.list()
     assert tracked_connect.opened == tracked_connect.closed == 3, "connection leaked by list"
 
+    store.ping()
+    assert tracked_connect.opened == tracked_connect.closed == 4, "connection leaked by ping"
+
 
 def test_connection_closed_and_rolled_back_on_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

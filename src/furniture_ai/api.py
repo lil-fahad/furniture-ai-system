@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import time
 from functools import lru_cache
 from typing import Annotated
@@ -94,8 +95,9 @@ def ready() -> dict[str, object]:
     active = get_settings()
     try:
         model_statuses = _model_registry(active).statuses()
-        get_booking_store()
-    except (OSError, ValueError) as exc:
+        store = get_booking_store()
+        store.ping()
+    except (OSError, ValueError, sqlite3.Error) as exc:
         raise HTTPException(
             status_code=503,
             detail="Application dependencies are not ready",
