@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """FurnitureAI multi-agent coordination helper.
 
-Reads live GitHub state, reports active AI leases from issue #66, detects
-parallel PR file overlap, and publishes main-branch updates to the coordination
-board. The script uses only the Python standard library.
+Reads live GitHub state, reports active AI leases from issue #66, rejects stale
+or undeclared pull requests, detects parallel PR file overlap, and publishes
+main-branch updates to the coordination board. Uses only the Python standard
+library so the guard can run before project dependencies are installed.
 """
 
 from __future__ import annotations
@@ -20,6 +21,15 @@ from typing import Any
 COORDINATION_ISSUE = 66
 DEFAULT_REPOSITORY = "lil-fahad/furniture-ai-system"
 API_ROOT = "https://api.github.com"
+REQUIRED_LEASE_FIELDS = (
+    "agent",
+    "task",
+    "branch",
+    "base_sha",
+    "files",
+    "lease_until",
+    "status",
+)
 
 
 def _token() -> str | None:
@@ -36,7 +46,7 @@ def _request(
 ) -> Any:
     headers = {
         "Accept": "application/vnd.github+json",
-        "User-Agent": "FurnitureAI-AI-Coordination/1",
+        "User-Agent": "FurnitureAI-AI-Coordination/2",
         "X-GitHub-Api-Version": "2022-11-28",
     }
     active_token = token or _token()
@@ -155,6 +165,54 @@ def active_leases(
     )
 
 
+def lease_for_branch(
+    leases: list[dict[str, str]], branch: str | None
+) -> dict[str, str] | None:
+    if not branch:
+        return None
+    for lease in leases:
+        if lease.get("branch") == branch:
+            return lease
+    return None
+
+
+def pr_coordination_errors(
+    *,
+    head_branch: str | None,
+    base_sha: str | None,
+    live_main_sha: str,
+    leases: list[dict[str, str]],
+) -> list[str]:
+    errors: list[str] = []
+    if not head_branch:
+        errors.append("PR head branch could not be resolved")
+        return errors
+
+    if base_sha != live_main_sha:
+        errors.append(
+            "PR base SHA is not the current main SHA; rebuild/update the branch from "
+            "current main and rerun exact-head CI"
+        )
+
+    lease = lease_for_branch(leases, head_branch)
+    if lease is None:
+        errors.append(
+            f"PR branch `{head_branch}` has no active AI-LEASE on issue "
+            f"#{COORDINATION_ISSUE}"
+        )
+        return errors
+
+    missing = [field for field in REQUIRED_LEASE_FIELDS if not lease.get(field)]
+    if missing:
+        errors.append("AI-LEASE is missing required fields: " + ", ".join(missing))
+    if lease.get("base_sha") != base_sha:
+        errors.append(
+            "AI-LEASE base_sha does not match the PR base SHA; renew the lease after "
+            "updating the branch"
+        )
+    return errors
+
+
 def overlap_paths(left: set[str], right: set[str]) -> list[str]:
     return sorted(left.intersection(right))
 
@@ -204,25 +262,34 @@ def _pull_ref(pr: dict[str, Any], side: str, key: str) -> str | None:
 def build_snapshot(repository: str, issue: int = COORDINATION_ISSUE) -> dict[str, object]:
     pulls = open_pulls(repository)
     leases = active_leases(coordination_comments(repository, issue))
+    lease_by_branch = {
+        lease["branch"]: lease for lease in leases if isinstance(lease.get("branch"), str)
+    }
+    open_rows: list[dict[str, object]] = []
+    for pr in pulls:
+        head = _pull_ref(pr, "head", "ref")
+        lease = lease_by_branch.get(head or "")
+        open_rows.append(
+            {
+                "number": pr.get("number"),
+                "title": pr.get("title"),
+                "draft": bool(pr.get("draft")),
+                "head": head,
+                "head_sha": _pull_ref(pr, "head", "sha"),
+                "base_sha": _pull_ref(pr, "base", "sha"),
+                "updated_at": pr.get("updated_at"),
+                "coordination_state": "declared" if lease else "undeclared",
+                "active_lease": lease,
+            }
+        )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "repository": repository,
         "observed_at": datetime.now(UTC).isoformat(),
         "main_sha": main_sha(repository),
         "coordination_issue": issue,
         "active_leases": leases,
-        "open_pull_requests": [
-            {
-                "number": pr.get("number"),
-                "title": pr.get("title"),
-                "draft": bool(pr.get("draft")),
-                "head": _pull_ref(pr, "head", "ref"),
-                "head_sha": _pull_ref(pr, "head", "sha"),
-                "base_sha": _pull_ref(pr, "base", "sha"),
-                "updated_at": pr.get("updated_at"),
-            }
-            for pr in pulls
-        ],
+        "open_pull_requests": open_rows,
     }
 
 
@@ -232,20 +299,26 @@ def check_pr(repository: str, number: int) -> int:
         raise RuntimeError(f"PR #{number} not found")
     current_files = pr_files(repository, number)
     current_draft = bool(current.get("draft"))
+    current_head = _pull_ref(current, "head", "ref")
+    current_base = _pull_ref(current, "base", "sha")
     body_value = current.get("body")
     current_body = body_value if isinstance(body_value, str) else ""
-    current_base = _pull_ref(current, "base", "sha")
     live_main = main_sha(repository)
+    leases = active_leases(coordination_comments(repository))
 
     print(f"coordination: PR #{number} files={len(current_files)} draft={current_draft}")
-    print(f"coordination: base_sha={current_base} live_main_sha={live_main}")
-    if current_base != live_main:
-        print(
-            "::warning::PR base SHA is older than current main; review intervening commits "
-            "and rerun exact-head CI before merge."
-        )
+    print(f"coordination: head={current_head} base_sha={current_base}")
+    print(f"coordination: live_main_sha={live_main} active_leases={len(leases)}")
 
-    blocking: list[tuple[int, list[str]]] = []
+    blocking_reasons = pr_coordination_errors(
+        head_branch=current_head,
+        base_sha=current_base,
+        live_main_sha=live_main,
+        leases=leases,
+    )
+    for reason in blocking_reasons:
+        print(f"::error::{reason}")
+
     for other in open_pulls(repository):
         other_number = other.get("number")
         if not isinstance(other_number, int) or other_number == number:
@@ -269,22 +342,20 @@ def check_pr(repository: str, number: int) -> int:
                 f"{shown}"
             )
             continue
-        blocking.append((other_number, shared))
+        blocking_reasons.append(f"uncoordinated overlap with PR #{other_number}")
         print(
             f"::error::Uncoordinated overlap with non-draft PR #{other_number}: "
             f"{shown}. Coordinate on issue #{COORDINATION_ISSUE} or add "
             f"`Coordination-Override: #{other_number}` with the reason to the PR body."
         )
 
-    leases = active_leases(coordination_comments(repository))
-    print(f"coordination: active_leases={len(leases)}")
     for lease in leases:
         print(
             "coordination: lease "
             f"agent={lease.get('agent')} branch={lease.get('branch')} "
             f"task={lease.get('task')} files={lease.get('files')}"
         )
-    return 2 if blocking else 0
+    return 2 if blocking_reasons else 0
 
 
 def notify_main(repository: str, issue: int) -> None:
@@ -297,10 +368,17 @@ def notify_main(repository: str, issue: int) -> None:
             message = commit_data["message"].splitlines()[0]
     pulls = open_pulls(repository)
     leases = active_leases(coordination_comments(repository, issue))
+    lease_branches = {lease.get("branch") for lease in leases}
     ready = [
         f"#{pr.get('number')} {pr.get('title')}"
         for pr in pulls
         if not bool(pr.get("draft"))
+    ]
+    undeclared = [
+        f"#{pr.get('number')} {_pull_ref(pr, 'head', 'ref') or 'unknown-branch'}"
+        for pr in pulls
+        if not bool(pr.get("draft"))
+        and _pull_ref(pr, "head", "ref") not in lease_branches
     ]
     agent_names = ", ".join(lease.get("agent", "unknown") for lease in leases)
     body = "\n".join(
@@ -312,6 +390,7 @@ def notify_main(repository: str, issue: int) -> None:
             f"active_leases: {len(leases)}",
             "active_agents: " + (agent_names or "none declared"),
             "open_non_draft_prs: " + (" | ".join(ready) or "none"),
+            "undeclared_non_draft_prs: " + (" | ".join(undeclared) or "none"),
         ]
     )
     github_post(repository, f"/issues/{issue}/comments", {"body": body})
@@ -326,7 +405,7 @@ def parse_args() -> argparse.Namespace:
     snapshot.add_argument("--repo", default=DEFAULT_REPOSITORY)
     snapshot.add_argument("--issue", type=int, default=COORDINATION_ISSUE)
 
-    check = subparsers.add_parser("check-pr", help="guard a PR against uncoordinated overlap")
+    check = subparsers.add_parser("check-pr", help="enforce the PR coordination policy")
     check.add_argument("--repo", default=DEFAULT_REPOSITORY)
     check.add_argument("--pr", type=int, required=True)
 
