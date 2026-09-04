@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "sync": {
+    "enabled": true,
+    "remote": "origin",
+    "branch": "main",
+    "interval_seconds": 300
+  },
+  "idle_sleep_seconds": 30,
+  "shutdown_grace_seconds": 45,
+  "jobs": [
+    {
+      "id": "style-classifier",
+      "task": "style_classifier",
+      "enabled": true,
+      "data": "data/styles_prepared",
+      "output": "models/style_classifier/efficientnet_b0.pth",
+      "checkpoint_every_steps": 100,
+      "args": [
+        "--epochs",
+        "30",
+        "--batch-size",
+        "64",
+        "--device",
+        "cuda",
+        "--precision",
+        "auto",
+        "--class-balance",
+        "sampler",
+        "--early-stopping-patience",
+        "5"
+      ]
+    },
+    {
+      "id": "room-classifier",
+      "task": "room_classifier",
+      "enabled": true,
+      "data": "data/rooms",
+      "output": "models/room_classifier/efficientnet_b0.pth",
+      "checkpoint_every_steps": 100,
+      "args": [
+        "--epochs",
+        "20",
+        "--batch-size",
+        "32",
+        "--device",
+        "cuda",
+        "--precision",
+        "auto",
+        "--class-balance",
+        "sampler",
+        "--early-stopping-patience",
+        "5"
+      ]
+    },
+    {
+      "id": "floorplan-segmenter",
+      "task": "floorplan_segmenter",
+      "enabled": true,
+      "data": "data/plans",
+      "output": "models/floorplan_segmenter/unet.pt",
+      "args": [
+        "--epochs",
+        "30",
+        "--batch-size",
+        "4",
+        "--device",
+        "cuda",
+        "--mask-remap",
+        "auto",
+        "--early-stopping-patience",
+        "6"
+      ]
+    }
+  ]
+}
