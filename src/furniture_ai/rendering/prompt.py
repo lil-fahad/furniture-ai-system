@@ -36,8 +36,9 @@ class PromptCompiler:
             f"camera height {scene.camera.height_cm:.1f}cm. "
             "Preserve the supplied room geometry and every grounded furniture placement exactly. "
             "Keep furniture scale, orientation, and product identity consistent with the scene. "
-            "Use physically plausible materials, realistic daylight and practical interior lighting, "
-            "natural shadows, correct perspective, and high-detail architectural photography. "
+            "Use physically plausible materials, realistic daylight and practical interior "
+            "lighting, natural shadows, correct perspective, and high-detail architectural "
+            "photography. "
             + " ".join(room_lines)
         )
         negative_prompt = "; ".join(scene.negative_constraints)
