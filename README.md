@@ -1,12 +1,13 @@
 # Furniture AI System
 
-A single production-oriented repository for interior-design automation. It replaces the former collection of overlapping repositories and submodules with one Python package, one API, one UI, one model registry, and one test suite.
+A single production-oriented repository for interior-design automation. It replaces the former collection of overlapping repositories and submodules with one Python package, one composed API surface, one UI, one model registry, and one test suite.
 
 ## Included capabilities
 
 - Secure floor-plan image upload and validation.
 - Deterministic room extraction using OpenCV, with safe fallbacks.
 - Constraint-based furniture placement using Shapely.
+- Platform V2 portfolio generation with deterministic placement policies, validation-first ranking, and auditable decision graphs while preserving all `/api/v1` contracts.
 - Optional OpenAI vision refinement and design briefs through `OPENAI_API_KEY`.
 - Product catalog and persistent SQLite booking service.
 - Verified external professional model bundle with safe installation and lazy use.
@@ -23,10 +24,10 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev,ui]"
 cp .env.example .env
-uvicorn furniture_ai.api:app --reload
+uvicorn furniture_ai.api_entry:app --reload
 ```
 
-Open `http://127.0.0.1:8000/docs`.
+Open `http://127.0.0.1:8000/docs`. The composed application serves the existing `/api/v1/*` API and the additive `/api/v2/*` Platform V2 routes from the same process.
 
 For the UI:
 
@@ -43,6 +44,11 @@ The UI reads `FURNITURE_API_URL` (see `.env.example`) to locate the API.
   before the image is decoded into memory.
 - Degenerate room polygons (collinear or zero-area) posted to `/api/v1/layout`
   are rejected with `422` instead of a server error.
+- `/api/v2/capabilities` reports the active Platform V2 contract. V2 withholds
+  heuristic room labels by default unless evidence-backed semantic refinement is
+  explicitly requested.
+- Platform V2 portfolio ranking is deterministic and validation-first; ranking
+  order is not presented as calibrated model confidence.
 - In `production` mode `SERVICE_API_KEY` must be at least 24 characters long;
   `docker-compose.yml` sets `ENVIRONMENT=production`, so export a compliant key
   before `docker compose up`.
