@@ -53,6 +53,7 @@ def _bootstrap(branch: str = "feat/x", session_id: str = "session-x") -> dict[st
         "binary_files": "10",
         "manifest_sha256": "manifest-abc",
         "observed_active_sessions": "1",
+        "conflict_state": "clear",
         "status": "complete",
     }
 
