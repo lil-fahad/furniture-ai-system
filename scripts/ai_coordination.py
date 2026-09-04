@@ -18,7 +18,6 @@ import hashlib
 import json
 import os
 import subprocess
-import sys
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
@@ -54,6 +53,7 @@ REQUIRED_BOOTSTRAP_FIELDS = (
     "binary_files",
     "manifest_sha256",
     "observed_active_sessions",
+    "conflict_state",
     "status",
 )
 
@@ -286,6 +286,11 @@ def pr_coordination_errors(
         )
     if receipt.get("status", "").lower() != "complete":
         errors.append("AI-BOOTSTRAP status must be complete")
+    if receipt.get("conflict_state", "").lower() not in {
+        "clear",
+        "coordination_required",
+    }:
+        errors.append("AI-BOOTSTRAP conflict_state must be clear or coordination_required")
     if receipt.get("main_sha") != base_sha:
         errors.append("AI-BOOTSTRAP main_sha does not match the PR base SHA")
     if lease.get("bootstrap_main_sha") != receipt.get("main_sha"):
@@ -599,9 +604,6 @@ def tracked_repository_manifest(root: Path) -> dict[str, object]:
     text_files = 0
     binary_files = 0
     for relative in paths:
-        # Read the canonical tracked Git blob rather than platform-normalized
-        # working-tree bytes. This keeps receipts identical across CRLF/LF
-        # checkouts while consuming every tracked file byte-for-byte.
         data = _git_bytes(root, "show", f"HEAD:{relative}")
         total_bytes += len(data)
         try:
