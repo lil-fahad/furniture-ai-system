@@ -49,7 +49,10 @@ def test_load_config_rejects_non_training_task(tmp_path: Path) -> None:
         local_worker.load_config(config)
 
 
-def test_load_config_blocks_worker_managed_path_overrides(tmp_path: Path) -> None:
+@pytest.mark.parametrize("argument", ["--output", "--output=/tmp/escape.pth", "--resume=x.pth"])
+def test_load_config_blocks_worker_managed_path_overrides(
+    tmp_path: Path, argument: str
+) -> None:
     config = tmp_path / "jobs.json"
     write_config(
         config,
@@ -59,7 +62,7 @@ def test_load_config_blocks_worker_managed_path_overrides(tmp_path: Path) -> Non
                 "task": "style_classifier",
                 "data": "data/styles_prepared",
                 "output": "models/style.pth",
-                "args": ["--output", "/tmp/escape.pth"],
+                "args": [argument],
             }
         ],
     )
@@ -84,6 +87,7 @@ def test_classifier_command_includes_resume_only_when_allowed(tmp_path: Path) ->
     without_resume = local_worker.build_command(repo, job, resume_allowed=False)
     with_resume = local_worker.build_command(repo, job, resume_allowed=True)
 
+    assert without_resume[1:3] == ["-m", "training.local_resumable_classifier"]
     assert "--resume-output" in without_resume
     assert "--checkpoint-every-steps" in without_resume
     assert "--resume" not in without_resume
@@ -105,6 +109,23 @@ def test_segmenter_command_uses_dedicated_checkpoint(tmp_path: Path) -> None:
     assert "--checkpoint" in command
     assert str(checkpoint) in command
     assert "--resume" not in command
+
+
+def test_sync_skips_when_checkout_is_not_configured_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def fake_git(_repo: Path, *arguments: str):
+        calls.append(arguments)
+        return type("Result", (), {"returncode": 0, "stdout": "feature\n", "stderr": ""})()
+
+    monkeypatch.setattr(local_worker, "git_command", fake_git)
+    changed = local_worker.sync_from_github(
+        tmp_path, {"enabled": True, "remote": "origin", "branch": "main"}
+    )
+    assert changed is False
+    assert calls == [("branch", "--show-current")]
 
 
 def test_successful_matching_job_is_not_retrained(tmp_path: Path) -> None:
