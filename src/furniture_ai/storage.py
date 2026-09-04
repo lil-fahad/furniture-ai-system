@@ -41,6 +41,11 @@ class BookingStore:
                     """
             )
 
+    def ping(self) -> None:
+        """Verify that SQLite is reachable and able to execute a query."""
+        with closing(self._connect()) as connection:
+            connection.execute("SELECT 1").fetchone()
+
     def create(self, request: BookingCreate) -> Booking:
         created_at = datetime.now(UTC).isoformat()
         with self._lock, closing(self._connect()) as connection:
