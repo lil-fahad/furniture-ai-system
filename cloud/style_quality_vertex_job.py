@@ -125,7 +125,9 @@ def upload_quality_artifacts(
     }
     for key, (remote, local) in mappings.items():
         if local.is_file():
-            content_type = "application/x-ndjson" if local.suffix == ".jsonl" else "application/json"
+            content_type = (
+                "application/x-ndjson" if local.suffix == ".jsonl" else "application/json"
+            )
             artifacts[key] = store.upload_file(remote, local, content_type)
     return artifacts
 
