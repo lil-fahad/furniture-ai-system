@@ -7,7 +7,6 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets
-
 from train_style_classifier import (
     build_model,
     build_transforms,
