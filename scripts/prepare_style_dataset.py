@@ -15,9 +15,9 @@ import os
 import random
 import shutil
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from PIL import Image, ImageOps, ImageStat, UnidentifiedImageError
 
@@ -357,7 +357,7 @@ def dataset_fingerprint(records: list[ImageRecord], assignments: dict[int, str])
     digest = hashlib.sha256()
     for index in sorted(assignments, key=lambda item: records[item].relative_path):
         record = records[index]
-        digest.update(f"{record.sha256}|{record.label}|{assignments[index]}\n".encode("utf-8"))
+        digest.update(f"{record.sha256}|{record.label}|{assignments[index]}\n".encode())
     return digest.hexdigest()
 
 
