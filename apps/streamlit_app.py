@@ -54,7 +54,13 @@ if uploaded and st.button("Analyze and furnish", type="primary"):
         st.json(response.json())
     else:
         try:
-            detail = response.json().get("detail", response.text)
+            error_payload = response.json()
         except ValueError:
             detail = response.text
+        else:
+            detail = (
+                error_payload.get("detail", response.text)
+                if isinstance(error_payload, dict)
+                else response.text
+            )
         st.error(f"API error {response.status_code}: {detail}")
