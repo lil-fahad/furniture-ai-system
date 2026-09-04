@@ -1,12 +1,25 @@
 # Autonomous local model training
 
-FurnitureAI can dedicate one local computer to model training only. After a one-time installation, the worker starts automatically with the operating system, reads the training queue from GitHub, trains only allow-listed FurnitureAI trainers, writes local checkpoints, and resumes interrupted work after reboot.
+FurnitureAI can dedicate one local computer to model training only. After a one-time installation, the worker starts automatically with the operating system, trains only allow-listed FurnitureAI trainers, writes local checkpoints, and resumes interrupted work after reboot.
+
+## Security boundary
+
+The persistent training worker is intentionally **not** a software-update agent.
+
+- Automatic GitHub code synchronization is disabled in `training/local_training_jobs.json`.
+- A remote change to `main` is therefore not fetched and executed by an already-running worker by default.
+- Updating code is an explicit local administrative action: rerun the setup/update process or manually review and fast-forward the checkout.
+- Windows boot tasks use the restricted Network Service identity (well-known SID `S-1-5-20`) with `RunLevel Limited`; they must not run as SYSTEM or Highest.
+- The one-time Windows installer still requires Administrator rights to install dependencies, set ACLs, and register the task. Those installation privileges are not inherited by the persistent worker.
+- The worker continues to reject arbitrary shell tasks. Only the allow-listed training task types in `training/local_worker.py` are accepted.
+
+This separation prevents a repository write or merge by itself from immediately becoming privileged code execution on an idle Windows training computer.
 
 ## Behavior
 
 - The worker starts at Windows boot or as a Linux systemd service.
-- It fast-forwards the local repository from `origin/main` only between training jobs.
-- It never interrupts a running job just to pull new code.
+- It does not pull new repository code automatically with the committed configuration.
+- It never interrupts a running job for code updates.
 - It runs only the allow-listed model trainers defined in `training/local_worker.py`.
 - Runtime state, logs, caches, and resume checkpoints live under `.furnitureai-local/` and are ignored by Git.
 - Model binaries remain local under `models/` and are ignored by Git.
@@ -21,7 +34,7 @@ When the operating system delivers a termination signal, the worker asks the tra
 
 Unexpected power loss cannot be made transactional by software. The periodic checkpoint limits lost work to the interval since the most recent checkpoint. The default classifier interval is 100 optimizer steps and can be lowered in `training/local_training_jobs.json`.
 
-The existing floor-plan segmenter already stores model, optimizer, scheduler, epoch, and best-model state after each epoch. The worker automatically passes its local checkpoint back through `--resume` after an interrupted run.
+The existing floor-plan segmenter stores model, optimizer, scheduler, epoch, and best-model state after each epoch. The worker automatically passes its local checkpoint back through `--resume` after an interrupted run.
 
 ## Training queue
 
@@ -41,7 +54,7 @@ All jobs are enabled by default. A job starts only when its configured local dat
 
 Training output defaults to the corresponding directories below `models/`.
 
-The worker deliberately does not expose an arbitrary shell-command queue. A GitHub job may select only a supported trainer and its trainer arguments; output and resume paths remain controlled by the worker.
+The worker deliberately does not expose an arbitrary shell-command queue. A job may select only a supported trainer and its trainer arguments; output and resume paths remain controlled by the worker.
 
 ## Windows one-time installation
 
@@ -51,7 +64,9 @@ Open PowerShell as Administrator in the repository and run:
 powershell -ExecutionPolicy Bypass -File scripts/install_local_trainer_windows.ps1
 ```
 
-The installer creates `.trainer-venv`, installs the training dependencies, registers `FurnitureAI-LocalTrainer` in Task Scheduler as a SYSTEM startup task, and starts it immediately. After that, no terminal command is needed after normal reboots.
+The installer creates `.trainer-venv`, installs the training dependencies, grants the restricted Network Service account access to the required repository tree, registers `FurnitureAI-LocalTrainer` as a limited startup task, and starts it.
+
+The standalone `FurnitureAI_GPU_Trainer_Setup.ps1` performs the same persistent-account hardening while also provisioning the dedicated checkout and checking the NVIDIA/PyTorch installation.
 
 State:
 
@@ -65,6 +80,10 @@ Logs:
 .furnitureai-local/logs/
 ```
 
+### Windows GPU service-session note
+
+GPU access from Windows service identities depends on the local NVIDIA/Windows environment. The setup verifies CUDA for the installation account, but that does not prove every driver exposes the GPU identically to Network Service. If the restricted startup task cannot access CUDA, do **not** switch it to SYSTEM/Highest. Use a dedicated restricted training account configured locally, or use the Linux systemd deployment, and verify CUDA from that execution context.
+
 ## Linux one-time installation
 
 From the repository:
@@ -73,7 +92,7 @@ From the repository:
 sudo bash scripts/install_local_trainer_linux.sh
 ```
 
-This creates the training virtual environment and enables `furnitureai-local-trainer.service` at boot.
+This creates the training virtual environment and enables `furnitureai-local-trainer.service` at boot. The service runs as the configured non-root user rather than root.
 
 Useful inspection commands:
 
@@ -82,8 +101,18 @@ systemctl status furnitureai-local-trainer
 journalctl -u furnitureai-local-trainer -f
 ```
 
-## GitHub synchronization
+## Updating training code
 
-By default the worker checks `origin/main` every five minutes while idle/between jobs. It uses a fast-forward-only merge. If tracked local source files were edited on the training computer, automatic Git synchronization is skipped instead of overwriting those edits.
+The committed queue contains:
 
-Dataset and model files are intentionally not pulled from or pushed to GitHub by the worker. GitHub controls code and the training queue; large training data/checkpoints remain on the training computer unless a separate storage workflow is configured.
+```json
+"sync": {
+  "enabled": false
+}
+```
+
+Keep this disabled for unattended workers. To apply reviewed repository changes, perform an explicit local update while no training job is running, then restart the worker. The one-click Windows setup treats rerunning the setup as that explicit approval point and uses fast-forward-only Git operations.
+
+The legacy `sync_from_github` helper remains for compatibility with installations that deliberately maintain a local opt-in configuration, but it is not enabled by the repository's unattended default. Enabling it reintroduces a larger supply-chain trust surface and should not be done for a privileged or unattended host.
+
+Dataset and model files are intentionally not pulled from or pushed to GitHub by the worker. GitHub stores code and the training queue; large training data/checkpoints remain on the training computer unless a separate storage workflow is configured.
