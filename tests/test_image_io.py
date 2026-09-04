@@ -9,10 +9,14 @@ from furniture_ai.config import Settings
 from furniture_ai.image_io import ImageValidationError, load_validated_image
 
 
-def _png_bytes(width: int, height: int) -> bytes:
+def _image_bytes(width: int, height: int, image_format: str = "PNG") -> bytes:
     buffer = BytesIO()
-    Image.new("RGB", (width, height), "white").save(buffer, format="PNG")
+    Image.new("RGB", (width, height), "white").save(buffer, format=image_format)
     return buffer.getvalue()
+
+
+def _png_bytes(width: int, height: int) -> bytes:
+    return _image_bytes(width, height, "PNG")
 
 
 @pytest.fixture()
@@ -36,12 +40,44 @@ def test_disallowed_media_type_rejected(settings: Settings) -> None:
         load_validated_image(_png_bytes(128, 128), "image/gif", settings)
 
 
+def test_actual_unsupported_format_rejected_even_when_declared_png(settings: Settings) -> None:
+    gif = _image_bytes(128, 128, "GIF")
+
+    with pytest.raises(ImageValidationError, match="supported PNG, JPEG, or WebP"):
+        load_validated_image(gif, "image/png", settings)
+
+
+def test_actual_unsupported_format_rejected_without_declared_type(settings: Settings) -> None:
+    gif = _image_bytes(128, 128, "GIF")
+
+    with pytest.raises(ImageValidationError, match="supported PNG, JPEG, or WebP"):
+        load_validated_image(gif, None, settings)
+
+
+def test_multiframe_allowed_format_is_rejected(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class MultiFramePng:
+        format = "PNG"
+        n_frames = 2
+        width = 128
+        height = 128
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    monkeypatch.setattr(Image, "open", lambda *args, **kwargs: MultiFramePng())
+
+    with pytest.raises(ImageValidationError, match="multi-frame"):
+        load_validated_image(_png_bytes(128, 128), "image/png", settings)
+
+
 def test_oversized_pixels_rejected_before_decode(
     settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # 1500x1000 = 1.5M pixels > the 1M floor allowed by Settings validation,
-    # but below PIL's hard error threshold (2x MAX), so the explicit
-    # pre-decode dimension check is what rejects it.
     limited = settings.model_copy(update={"max_image_pixels": 1_000_000})
     data = _png_bytes(1500, 1000)
 
@@ -70,18 +106,24 @@ def test_decompression_bomb_error_mapped_to_validation_error(
         load_validated_image(_png_bytes(128, 128), "image/png", settings)
 
 
-def test_pil_hard_bomb_error_also_mapped(settings: Settings) -> None:
-    # 3000x3000 = 9M pixels > 2x the configured 1M limit: PIL itself raises
-    # DecompressionBombError at open time and it must surface as 422, not 500.
-    limited = settings.model_copy(update={"max_image_pixels": 1_000_000})
+def test_pillow_open_bomb_error_also_mapped(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def bomb(*args, **kwargs):
+        raise Image.DecompressionBombError("too many pixels")
+
+    monkeypatch.setattr(Image, "open", bomb)
     with pytest.raises(ImageValidationError, match="pixel limit"):
-        load_validated_image(_png_bytes(3000, 3000), "image/png", limited)
+        load_validated_image(_png_bytes(128, 128), "image/png", settings)
 
 
-def test_max_image_pixels_aligned_with_settings(settings: Settings) -> None:
+def test_validation_does_not_mutate_pillow_global_limit(settings: Settings) -> None:
+    original_limit = Image.MAX_IMAGE_PIXELS
     limited = settings.model_copy(update={"max_image_pixels": 1_000_000})
+
     load_validated_image(_png_bytes(128, 128), "image/png", limited)
-    assert Image.MAX_IMAGE_PIXELS == 1_000_000
+
+    assert original_limit == Image.MAX_IMAGE_PIXELS
 
 
 def test_garbage_bytes_rejected(settings: Settings) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from io import BytesIO
 
 from PIL import Image, UnidentifiedImageError
@@ -7,6 +8,7 @@ from PIL import Image, UnidentifiedImageError
 from furniture_ai.config import Settings
 
 ALLOWED_MEDIA_TYPES = {"image/png", "image/jpeg", "image/webp"}
+ALLOWED_IMAGE_FORMATS = {"PNG", "JPEG", "WEBP"}
 
 
 class ImageValidationError(ValueError):
@@ -14,14 +16,14 @@ class ImageValidationError(ValueError):
 
 
 def load_validated_image(data: bytes, media_type: str | None, settings: Settings) -> Image.Image:
-    """Validate and decode an uploaded image.
+    """Validate and decode one still PNG, JPEG, or WebP image.
 
     The declared media type is only a hint (parameters after ``;`` are
-    ignored); the actual bytes sniffed by PIL are authoritative. Pixel-count
-    limits are enforced from the container dimensions immediately after
-    ``Image.open`` — before any pixel data is decoded — so oversized images are
-    rejected without a decompression window. All failures raise
-    ``ImageValidationError`` (mapped to HTTP 422 by the API layer).
+    ignored); the format sniffed from the bytes is authoritative. Pixel-count
+    limits are enforced from container dimensions immediately after
+    ``Image.open`` and before pixel decoding. The function never mutates
+    Pillow's process-global decompression settings, so concurrent requests with
+    different Settings objects cannot change each other's validation policy.
     """
     if not data:
         raise ImageValidationError("The uploaded image is empty")
@@ -32,21 +34,29 @@ def load_validated_image(data: bytes, media_type: str | None, settings: Settings
         if declared not in ALLOWED_MEDIA_TYPES:
             raise ImageValidationError("Only PNG, JPEG, and WebP images are accepted")
 
-    # Keep PIL's own decompression guard aligned with the configured limit as
-    # defense in depth; the explicit dimension check below rejects first.
-    Image.MAX_IMAGE_PIXELS = settings.max_image_pixels
-
     try:
-        # Single-pass open + decode: the pixel-count limit is enforced from the
-        # container dimensions immediately after ``Image.open`` (before any
-        # pixel data is decoded), and ``convert("RGB")`` below forces a full
-        # decode that validates the payload — corrupt or truncated data raises
-        # here, so the old probe/verify/reopen cycle is unnecessary.
-        image = Image.open(BytesIO(data))
-        if image.width * image.height > settings.max_image_pixels:
-            image.close()
-            raise ImageValidationError("The image dimensions exceed the configured pixel limit")
-        image = image.convert("RGB")
+        # Pillow's default bomb threshold is process-global. Do not rewrite it
+        # per request. Its warning can fire below FurnitureAI's configured
+        # maximum (which is capped at 100M pixels), so suppress only the warning
+        # locally and enforce the application limit explicitly before decode.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+            with Image.open(BytesIO(data)) as source:
+                actual_format = (source.format or "").upper()
+                if actual_format not in ALLOWED_IMAGE_FORMATS:
+                    raise ImageValidationError(
+                        "The uploaded bytes are not a supported PNG, JPEG, or WebP image"
+                    )
+                if getattr(source, "n_frames", 1) != 1:
+                    raise ImageValidationError("Animated or multi-frame images are not accepted")
+                if source.width * source.height > settings.max_image_pixels:
+                    raise ImageValidationError(
+                        "The image dimensions exceed the configured pixel limit"
+                    )
+                # ``convert`` forces a full decode, validating corrupt or
+                # truncated payloads, and returns a detached image before the
+                # source decoder is deterministically closed by the context.
+                image = source.convert("RGB")
     except ImageValidationError:
         raise
     except Image.DecompressionBombError as exc:
@@ -57,5 +67,6 @@ def load_validated_image(data: bytes, media_type: str | None, settings: Settings
         raise ImageValidationError("The uploaded file is not a valid image") from exc
 
     if image.width < 64 or image.height < 64:
+        image.close()
         raise ImageValidationError("The image is too small for floor-plan analysis")
     return image
