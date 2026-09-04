@@ -243,6 +243,7 @@ def pr_coordination_errors(
     live_main_sha: str,
     leases: list[dict[str, str]],
     bootstraps: list[dict[str, str]],
+    expected_manifest: dict[str, object] | None = None,
 ) -> list[str]:
     errors: list[str] = []
     if not head_branch:
@@ -293,6 +294,19 @@ def pr_coordination_errors(
         errors.append("AI-LEASE bootstrap_manifest_sha does not match AI-BOOTSTRAP")
     if lease.get("bootstrap_files") != receipt.get("tracked_files"):
         errors.append("AI-LEASE bootstrap_files does not match AI-BOOTSTRAP")
+    if expected_manifest is not None:
+        expected_pairs = {
+            "manifest_sha256": "manifest_sha256",
+            "tracked_files": "tracked_files",
+            "tracked_bytes": "tracked_bytes",
+            "text_files": "text_files",
+            "binary_files": "binary_files",
+        }
+        for receipt_field, manifest_field in expected_pairs.items():
+            if receipt.get(receipt_field) != str(expected_manifest.get(manifest_field)):
+                errors.append(
+                    f"AI-BOOTSTRAP {receipt_field} does not match the trusted main checkout"
+                )
     return errors
 
 
@@ -711,6 +725,7 @@ def check_pr(repository: str, number: int) -> int:
     comments = coordination_comments(repository)
     leases = active_leases(comments)
     bootstraps = bootstrap_records(comments)
+    trusted_manifest = tracked_repository_manifest(Path.cwd())
 
     print(f"coordination: PR #{number} files={len(current_files)} draft={current_draft}")
     print(f"coordination: head={current_head} base_sha={current_base}")
@@ -722,6 +737,7 @@ def check_pr(repository: str, number: int) -> int:
         live_main_sha=live_main,
         leases=leases,
         bootstraps=bootstraps,
+        expected_manifest=trusted_manifest,
     )
     for reason in blocking_reasons:
         print(f"::error::{reason}")
