@@ -9,7 +9,7 @@ lint:
 	ruff check .
 
 run:
-	uvicorn furniture_ai.api:app --reload
+	uvicorn furniture_ai.api_entry:app --reload
 
 ui:
 	streamlit run apps/streamlit_app.py
