@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from scripts.predict_openimages_furniture import (
     find_image,
     normalized_box,
     validate_sha256,
+    verify_model_artifact,
 )
 
 
@@ -38,6 +40,25 @@ def test_model_sha256_validation_is_fail_closed() -> None:
     assert validate_sha256("A" * 64) == "a" * 64
     with pytest.raises(ValueError, match="64 hexadecimal"):
         validate_sha256("not-a-sha")
+
+
+def test_model_artifact_is_verified_before_inference(tmp_path: Path) -> None:
+    weights = tmp_path / "model.safetensors"
+    payload = b"verified-model-bytes"
+    weights.write_bytes(payload)
+    expected = hashlib.sha256(payload).hexdigest()
+
+    artifact = verify_model_artifact(tmp_path, expected)
+
+    assert artifact["sha256"] == expected
+    assert artifact["size_bytes"] == len(payload)
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        verify_model_artifact(tmp_path, "0" * 64)
+
+
+def test_model_artifact_requires_expected_weights_file(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        verify_model_artifact(tmp_path, "0" * 64)
 
 
 def test_benchmark_image_ids_are_unique_and_sorted(tmp_path: Path) -> None:
