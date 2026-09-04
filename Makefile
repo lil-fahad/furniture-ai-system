@@ -1,6 +1,6 @@
-.PHONY: install test lint run ui docker check audit models-check models-verify
+.PHONY: install test lint run web web-build ui-legacy docker check audit models-check models-verify
 install:
-	python -m pip install -e ".[dev,ui]"
+	python -m pip install -e ".[dev]"
 
 test:
 	pytest
@@ -9,9 +9,15 @@ lint:
 	ruff check .
 
 run:
-	uvicorn furniture_ai.api:app --reload
+	uvicorn furniture_ai.api_entry:app --reload
 
-ui:
+web:
+	cd apps/web && npm install && npm run dev
+
+web-build:
+	cd apps/web && npm install --ignore-scripts --no-fund --no-audit && npm run typecheck && npm run build
+
+ui-legacy:
 	streamlit run apps/streamlit_app.py
 
 docker:
