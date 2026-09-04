@@ -123,7 +123,7 @@ def test_validation_does_not_mutate_pillow_global_limit(settings: Settings) -> N
 
     load_validated_image(_png_bytes(128, 128), "image/png", limited)
 
-    assert Image.MAX_IMAGE_PIXELS == original_limit
+    assert original_limit == Image.MAX_IMAGE_PIXELS
 
 
 def test_garbage_bytes_rejected(settings: Settings) -> None:
