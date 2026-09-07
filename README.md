@@ -166,7 +166,8 @@ src/furniture_ai/      Unified application package
 apps/                  One Streamlit interface
 training/              Supported training pipelines
 models/                 Model artifacts, manifests, and installer metadata
-data/                   Catalog data plus dataset/model lineage metadata\scripts/                Validation, bundle installation, and audit utilities
+data/                   Catalog data plus dataset/model lineage metadata
+scripts/                Validation, bundle installation, and audit utilities
 tests/                  Unified tests
 docs/                   Architecture, migration, security, and model docs
 ```
