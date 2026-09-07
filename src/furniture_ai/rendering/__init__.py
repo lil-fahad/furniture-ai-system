@@ -1,3 +1,4 @@
+from furniture_ai.rendering.backend import RenderBackendError, RenderBackendUnavailable
 from furniture_ai.rendering.contracts import (
     CameraSpec,
     RenderArtifact,
@@ -18,6 +19,8 @@ __all__ = [
     "CameraSpec",
     "PromptCompiler",
     "RenderArtifact",
+    "RenderBackendError",
+    "RenderBackendUnavailable",
     "RendererKind",
     "RenderPreviewRequest",
     "RenderPreviewResult",
