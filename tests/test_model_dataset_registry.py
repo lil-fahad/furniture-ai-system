@@ -22,10 +22,11 @@ EXPECTED_TRAINED_MODELS = {
 
 def test_project_registry_contains_only_verified_trained_artifacts() -> None:
     registry = ModelDatasetRegistry.load(REGISTRY_PATH)
+    model_ids = {model.id for model in registry.models}
 
-    assert {model.id for model in registry.models} == EXPECTED_TRAINED_MODELS
-    assert "room-classifier-efficientnet-b0" not in {model.id for model in registry.models}
-    assert "floorplan-segmenter-unet" not in {model.id for model in registry.models}
+    assert model_ids == EXPECTED_TRAINED_MODELS
+    assert "room-classifier-efficientnet-b0" not in model_ids
+    assert "floorplan-segmenter-unet" not in model_ids
 
 
 def test_every_trained_model_has_resolvable_dataset_lineage() -> None:
@@ -44,7 +45,9 @@ def test_registry_queries_models_and_datasets_bidirectionally() -> None:
     registry = ModelDatasetRegistry.load(REGISTRY_PATH)
 
     starter = registry.trained_models_for_dataset("abo-starter-recovered")
-    assert [model.id for model in starter] == ["efficientnet_b0-efficientnet_b0_best"]
+    assert [model.id for model in starter] == [
+        "efficientnet_b0-efficientnet_b0_best"
+    ]
 
     datasets = registry.datasets_for_model("supplier-ranker-ridge-v1")
     assert [dataset.id for dataset in datasets] == ["supplier-master-v1"]
@@ -105,15 +108,14 @@ def test_registry_rejects_model_artifacts_inside_dataset_tree(tmp_path: Path) ->
 
 
 def test_runtime_manifest_exposes_dataset_ids_for_trained_classifiers() -> None:
-    manifest = json.loads((PROJECT_ROOT / "models" / "manifest.json").read_text(encoding="utf-8"))
+    manifest_path = PROJECT_ROOT / "models" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     entries = {entry["id"]: entry for entry in manifest["models"]}
 
     assert entries["efficientnet_b0-efficientnet_b0_best"]["dataset_ids"] == [
         "abo-starter-recovered"
     ]
-    assert entries["efficientnet_b0_multiview-efficientnet_b0_best"]["dataset_ids"] == [
-        "abo-multiview-recovered"
-    ]
-    assert entries["efficientnet_b0_multiview-efficientnet_b0_last"]["dataset_ids"] == [
-        "abo-multiview-recovered"
-    ]
+    multiview_best = entries["efficientnet_b0_multiview-efficientnet_b0_best"]
+    multiview_last = entries["efficientnet_b0_multiview-efficientnet_b0_last"]
+    assert multiview_best["dataset_ids"] == ["abo-multiview-recovered"]
+    assert multiview_last["dataset_ids"] == ["abo-multiview-recovered"]
