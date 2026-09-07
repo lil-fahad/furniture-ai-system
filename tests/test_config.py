@@ -73,14 +73,32 @@ def test_relative_paths_fall_back_to_cwd_when_project_root_copy_missing(
         model_manifest_path=Path("models/manifest.json"),
         database_path=Path("data/furniture_ai.sqlite3"),
     )
-    assert settings.catalog_path == checkout / "data" / "furniture_catalog.json"
-    assert settings.model_manifest_path == checkout / "models" / "manifest.json"
-    assert settings.database_path == checkout / "data" / "furniture_ai.sqlite3"
+    assert settings.catalog_path == checkout / "data/furniture_catalog.json"
+    assert settings.model_manifest_path == checkout / "models/manifest.json"
+    assert settings.database_path == checkout / "data/furniture_ai.sqlite3"
 
 
 def test_allowed_origins_accepts_comma_separated_string() -> None:
     settings = Settings(environment="test", allowed_origins="http://a.test, http://b.test ,")
     assert settings.allowed_origins == ["http://a.test", "http://b.test"]
+
+
+def test_photoreal_render_defaults_use_current_gpt_image_backend() -> None:
+    settings = Settings(environment="test")
+
+    assert settings.openai_image_model == "gpt-image-2"
+    assert settings.openai_image_quality == "medium"
+    assert settings.openai_image_size == "1536x1024"
+    assert settings.openai_image_timeout_seconds == 180.0
+
+
+def test_photoreal_render_configuration_rejects_invalid_values() -> None:
+    with pytest.raises(ValidationError):
+        Settings(environment="test", openai_image_quality="ultra")
+    with pytest.raises(ValidationError):
+        Settings(environment="test", openai_image_size="123x456")
+    with pytest.raises(ValidationError, match="OPENAI_IMAGE_MODEL"):
+        Settings(environment="test", openai_image_model="   ")
 
 
 def test_production_requires_a_long_service_key() -> None:

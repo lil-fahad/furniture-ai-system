@@ -17,6 +17,7 @@ from furniture_ai.portfolio import (
     DesignPortfolioResult,
 )
 from furniture_ai.rendering import RenderingService, RenderPreviewRequest, RenderPreviewResult
+from furniture_ai.rendering.backend import RenderBackendError, RenderBackendUnavailable
 from furniture_ai.security import require_service_key
 
 router = APIRouter(
@@ -27,7 +28,12 @@ router = APIRouter(
 
 
 @router.get("/capabilities")
-def capabilities() -> dict[str, object]:
+def capabilities(
+    active_settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, object]:
+    configured_photorealistic = (
+        ["openai_gpt_image_2"] if active_settings.openai_configured else []
+    )
     return {
         "api_version": "2.0",
         "application_version": __version__,
@@ -40,8 +46,9 @@ def capabilities() -> dict[str, object]:
         "placement_policies": ["balanced", "wall_first", "fit_first"],
         "ranking_is_confidence": False,
         "rendering_preview": True,
-        "render_backends": ["mock"],
-        "photorealistic_backends": [],
+        "render_backends": ["mock", "openai_gpt_image_2"],
+        "photorealistic_backend_support": ["openai_gpt_image_2"],
+        "photorealistic_backends": configured_photorealistic,
     }
 
 
@@ -129,9 +136,22 @@ def design_portfolio(request: DesignPortfolioRequest) -> DesignPortfolioResult:
 
 
 @router.post("/render/preview", response_model=RenderPreviewResult)
-def render_preview(request: RenderPreviewRequest) -> RenderPreviewResult:
+def render_preview(
+    request: RenderPreviewRequest,
+    active_settings: Annotated[Settings, Depends(get_settings)],
+) -> RenderPreviewResult:
     """Compile a grounded scene and render it through the selected preview backend."""
     try:
-        return RenderingService().preview(request)
+        return RenderingService(settings=active_settings).preview(request)
+    except RenderBackendUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Photorealistic renderer is unavailable",
+        ) from exc
+    except RenderBackendError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Photorealistic image generation failed",
+        ) from exc
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
