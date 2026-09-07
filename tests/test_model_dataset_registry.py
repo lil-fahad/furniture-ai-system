@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from furniture_ai.model_dataset_registry import ModelDatasetRegistry
 
 
