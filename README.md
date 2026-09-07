@@ -12,6 +12,7 @@ A single production-oriented repository for interior-design automation. It repla
 - Product catalog and persistent SQLite booking service.
 - Verified external professional model bundle with safe installation and lazy use.
 - Optional DETR, SAM 2.1, Depth Anything V2, and trained EfficientNet-B0 checkpoints.
+- Verified trained-model ↔ dataset lineage with artifact hashes, metrics, provenance, and explicit limitations.
 - Reproducible training scripts and model manifests.
 - FastAPI, Streamlit, Docker, CI, repository audits, and security tests.
 
@@ -56,6 +57,14 @@ The UI reads `FURNITURE_API_URL` (see `.env.example`) to locate the API.
 ## Training
 
 Both training pipelines are reproducible and support CPU smoke runs.
+
+Verified trained artifacts are linked to their dataset/evaluation provenance in
+`data/model_dataset_registry.json`. Checkpoint binaries remain under `models/`
+or external artifact storage rather than being copied into raw dataset trees.
+Placeholder entries in `models/manifest.json` are not treated as trained until a
+checkpoint and its lineage are verified. See
+`docs/TRAINED_MODEL_DATASET_LINEAGE.md` for the registry contract and current
+model-to-dataset mappings.
 
 ```bash
 # Room classifier: skip the ImageNet weight download with --no-pretrained.
@@ -156,9 +165,8 @@ Never commit API keys. GitHub Actions should provide `OPENAI_API_KEY` as a repos
 src/furniture_ai/      Unified application package
 apps/                  One Streamlit interface
 training/              Supported training pipelines
-models/                 Lightweight manifests and external-model installer metadata
-data/                   Catalog data
-scripts/                Validation, bundle installation, and audit utilities
+models/                 Model artifacts, manifests, and installer metadata
+data/                   Catalog data plus dataset/model lineage metadata\scripts/                Validation, bundle installation, and audit utilities
 tests/                  Unified tests
 docs/                   Architecture, migration, security, and model docs
 ```
