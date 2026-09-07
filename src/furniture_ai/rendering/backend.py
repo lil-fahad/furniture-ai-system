@@ -1,15 +1,30 @@
 from __future__ import annotations
 
 import base64
+import binascii
 from html import escape
-from typing import Protocol
+from io import BytesIO
+from typing import Any, Protocol
 
+from PIL import Image, UnidentifiedImageError
+
+from furniture_ai.config import Settings
 from furniture_ai.rendering.contracts import (
     RenderArtifact,
     RendererKind,
     RenderPromptPackage,
     SceneSpec,
 )
+
+MAX_RENDER_BYTES = 25 * 1024 * 1024
+
+
+class RenderBackendUnavailable(RuntimeError):
+    """Raised when a requested renderer cannot be used in the current environment."""
+
+
+class RenderBackendError(RuntimeError):
+    """Raised for sanitized external-renderer failures."""
 
 
 class RendererBackend(Protocol):
@@ -115,7 +130,107 @@ class DeterministicMockRenderer:
         )
 
 
-def get_renderer(kind: RendererKind) -> RendererBackend:
+class OpenAIGPTImageRenderer:
+    """Generate a photorealistic room image through OpenAI's GPT-Image-2 Image API."""
+
+    kind = RendererKind.OPENAI_GPT_IMAGE_2
+    photorealistic = True
+
+    def __init__(self, settings: Settings, *, client: Any | None = None) -> None:
+        if not settings.openai_configured:
+            raise RenderBackendUnavailable("Photorealistic renderer is not configured")
+
+        if client is None:
+            try:
+                from openai import OpenAI
+            except ImportError as exc:
+                raise RenderBackendUnavailable("Photorealistic renderer is unavailable") from exc
+            key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else ""
+            client = OpenAI(
+                api_key=key,
+                timeout=settings.openai_image_timeout_seconds,
+                max_retries=1,
+            )
+
+        self.client = client
+        self.model = settings.openai_image_model
+        self.quality = settings.openai_image_quality
+        self.size = settings.openai_image_size
+
+    def render(
+        self,
+        scene: SceneSpec,
+        prompt: RenderPromptPackage,
+        *,
+        seed: int,
+    ) -> RenderArtifact:
+        render_prompt = (
+            f"{prompt.positive_prompt}\n\n"
+            f"Hard constraints: {prompt.negative_prompt}. "
+            "Render one finished photorealistic interior image only."
+        )
+        try:
+            response = self.client.images.generate(
+                model=self.model,
+                prompt=render_prompt,
+                quality=self.quality,
+                size=self.size,
+                background="opaque",
+            )
+        except Exception as exc:
+            raise RenderBackendError("Photorealistic image generation failed") from exc
+
+        try:
+            data = response.data
+            encoded = data[0].b64_json.strip()
+            image_bytes = base64.b64decode(encoded, validate=True)
+            if not image_bytes or len(image_bytes) > MAX_RENDER_BYTES:
+                raise ValueError("Image output size is invalid")
+            with Image.open(BytesIO(image_bytes)) as image:
+                width, height = image.size
+                image_format = image.format
+                image.verify()
+            if image_format != "PNG":
+                raise ValueError("Image output is not PNG")
+        except (
+            AttributeError,
+            IndexError,
+            TypeError,
+            ValueError,
+            binascii.Error,
+            UnidentifiedImageError,
+            OSError,
+        ) as exc:
+            raise RenderBackendError("Photorealistic renderer returned an invalid image") from exc
+
+        return RenderArtifact(
+            backend=self.kind,
+            media_type="image/png",
+            data_uri=f"data:image/png;base64,{encoded}",
+            width=width,
+            height=height,
+            metadata={
+                "model": self.model,
+                "quality": self.quality,
+                "requested_size": self.size,
+                "scene_fingerprint": prompt.scene_fingerprint,
+                "seed_requested": seed,
+                "seed_applied": False,
+                "reference_images_applied": 0,
+            },
+        )
+
+
+def get_renderer(
+    kind: RendererKind,
+    *,
+    settings: Settings | None = None,
+    client: Any | None = None,
+) -> RendererBackend:
     if kind is RendererKind.MOCK:
         return DeterministicMockRenderer()
+    if kind is RendererKind.OPENAI_GPT_IMAGE_2:
+        if settings is None:
+            raise RenderBackendUnavailable("Photorealistic renderer is not configured")
+        return OpenAIGPTImageRenderer(settings, client=client)
     raise ValueError(f"Unsupported renderer backend: {kind}")
