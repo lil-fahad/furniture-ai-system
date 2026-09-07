@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from furniture_ai.api_entry import app
+from furniture_ai.config import Settings, get_settings
 from furniture_ai.contracts import FloorPlanAnalysis, Point, Room
 from furniture_ai.design_graph import DesignDecisionGraph, DesignGraphBuilder, DesignGraphNode
 from furniture_ai.portfolio import DesignPortfolioEngine, DesignPortfolioRequest
@@ -38,8 +39,15 @@ def _floor_plan() -> FloorPlanAnalysis:
     )
 
 
-def test_v2_capabilities_are_explicit_about_evidence_and_ranking() -> None:
-    response = TestClient(app).get("/api/v2/capabilities")
+def test_v2_capabilities_are_explicit_about_evidence_ranking_and_rendering() -> None:
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        environment="test",
+        openai_api_key=None,
+    )
+    try:
+        response = TestClient(app).get("/api/v2/capabilities")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
 
     assert response.status_code == 200
     payload = response.json()
@@ -47,6 +55,9 @@ def test_v2_capabilities_are_explicit_about_evidence_and_ranking() -> None:
     assert payload["semantic_labels_default"] == "withheld_without_explicit_evidence"
     assert payload["placement_policies"] == ["balanced", "wall_first", "fit_first"]
     assert payload["ranking_is_confidence"] is False
+    assert payload["render_backends"] == ["mock", "openai_gpt_image_2"]
+    assert payload["photorealistic_backend_support"] == ["openai_gpt_image_2"]
+    assert payload["photorealistic_backends"] == []
 
 
 def test_v2_analyze_withholds_heuristic_semantics_by_default() -> None:
