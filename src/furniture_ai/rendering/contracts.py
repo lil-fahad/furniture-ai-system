@@ -10,6 +10,7 @@ from furniture_ai.contracts import DesignResult, OpeningKind, Point, Unit
 
 class RendererKind(StrEnum):
     MOCK = "mock"
+    OPENAI_GPT_IMAGE_2 = "openai_gpt_image_2"
 
 
 class CameraSpec(BaseModel):
