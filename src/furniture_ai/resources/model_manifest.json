@@ -84,6 +84,9 @@
       "required": false,
       "source": "FurnitureAI Professional Models v0.4.1 Repaired",
       "bundle": "furnitureai-professional-models-v0.4.1-repaired",
+      "dataset_ids": [
+        "abo-starter-recovered"
+      ],
       "classes": [
         "bed",
         "cabinet",
@@ -114,6 +117,9 @@
       "required": false,
       "source": "FurnitureAI Professional Models v0.4.1 Repaired",
       "bundle": "furnitureai-professional-models-v0.4.1-repaired",
+      "dataset_ids": [
+        "abo-multiview-recovered"
+      ],
       "classes": [
         "bed",
         "cabinet",
@@ -144,6 +150,9 @@
       "required": false,
       "source": "FurnitureAI Professional Models v0.4.1 Repaired",
       "bundle": "furnitureai-professional-models-v0.4.1-repaired",
+      "dataset_ids": [
+        "abo-multiview-recovered"
+      ],
       "classes": [
         "bed",
         "cabinet",

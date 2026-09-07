@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "verified_trained_only": true,
+    "model_binaries_in_dataset": false,
+    "raw_image_datasets_committed_to_git": false,
+    "lineage_contract": "Dataset records describe training/evaluation provenance; model artifacts remain under models/ or external artifact storage."
+  },
+  "datasets": [
+    {
+      "id": "abo-starter-recovered",
+      "name": "ABO starter recovered evaluation lineage",
+      "kind": "image_classification",
+      "path": "data/curated/abo_starter/images",
+      "availability": "external_not_committed",
+      "provenance": {
+        "evidence_path": "models/professional/checkpoints.json",
+        "confirmed_split_path": "data/curated/abo_starter/images/test",
+        "preprocessing": "square_pad_white_then_resize_224",
+        "source_bundle": "furnitureai-professional-models-v0.4.1-repaired"
+      },
+      "notes": "Recovered bundle metadata confirms the held-out test/evaluation lineage. The original full training/validation split provenance was not reconstructed, so this registry does not claim it."
+    },
+    {
+      "id": "abo-multiview-recovered",
+      "name": "ABO multiview recovered evaluation lineage",
+      "kind": "image_classification",
+      "path": "data/curated/abo_multiview/images",
+      "availability": "external_not_committed",
+      "provenance": {
+        "evidence_path": "models/professional/checkpoints.json",
+        "confirmed_split_path": "data/curated/abo_multiview/images/test",
+        "preprocessing": "square_pad_white_then_resize_224",
+        "source_bundle": "furnitureai-professional-models-v0.4.1-repaired"
+      },
+      "notes": "Recovered bundle metadata confirms the held-out test/evaluation lineage. The original full training/validation split provenance was not reconstructed, so this registry does not claim it."
+    },
+    {
+      "id": "supplier-master-v1",
+      "name": "FurnitureAI supplier master snapshot",
+      "kind": "tabular_ranking",
+      "path": "data/suppliers_master.csv.gz.b64",
+      "availability": "committed_encoded_snapshot",
+      "record_count": 41,
+      "provenance": {
+        "evidence_path": "models/supplier_ranker/metrics.json",
+        "target": "Suitability Score",
+        "seed": 20260805,
+        "validation": "leave-one-out and repeated 5-fold with 5 repeats"
+      },
+      "notes": "Small expert-curated supplier dataset. The suitability target is not an observed procurement outcome."
+    }
+  ],
+  "models": [
+    {
+      "id": "efficientnet_b0-efficientnet_b0_best",
+      "task": "furniture_classification",
+      "architecture": "efficientnet_b0",
+      "artifact_path": "models/professional/installed/efficientnet_b0/efficientnet_b0_best.pt",
+      "sha256": "983d2f3870e6561724067ab6a89ac2a77749d7b7710afc9664766c7082857cd0",
+      "size_bytes": 16390469,
+      "dataset_ids": [
+        "abo-starter-recovered"
+      ],
+      "status": "trained",
+      "source": "furnitureai-professional-models-v0.4.1-repaired",
+      "metrics_path": "models/professional/checkpoints.json",
+      "metrics": {
+        "test_accuracy": 0.77381,
+        "test_macro_f1": 0.742626,
+        "input_size": 224
+      },
+      "limitations": [
+        "Recovered metadata proves the reported test split and checkpoint integrity but does not reconstruct the complete original training split provenance."
+      ]
+    },
+    {
+      "id": "efficientnet_b0_multiview-efficientnet_b0_best",
+      "task": "furniture_classification",
+      "architecture": "efficientnet_b0",
+      "artifact_path": "models/professional/installed/efficientnet_b0_multiview/efficientnet_b0_best.pt",
+      "sha256": "c0609c87c86218644fa9356e26990d6d6171827acd0bdfc7e37a5e30a2a717eb",
+      "size_bytes": 48758913,
+      "dataset_ids": [
+        "abo-multiview-recovered"
+      ],
+      "status": "trained",
+      "source": "furnitureai-professional-models-v0.4.1-repaired",
+      "metrics_path": "models/professional/checkpoints.json",
+      "metrics": {
+        "test_accuracy": 0.659751,
+        "test_macro_f1": 0.651498,
+        "input_size": 224
+      },
+      "limitations": [
+        "Recovered metadata proves the reported test split and checkpoint integrity but does not reconstruct the complete original training split provenance."
+      ]
+    },
+    {
+      "id": "efficientnet_b0_multiview-efficientnet_b0_last",
+      "task": "furniture_classification",
+      "architecture": "efficientnet_b0",
+      "artifact_path": "models/professional/installed/efficientnet_b0_multiview/efficientnet_b0_last.pt",
+      "sha256": "2f4a983a82237a5a22c9718ca43ae86b72e0fc82fcf48ad84e64885aff74b092",
+      "size_bytes": 48758913,
+      "dataset_ids": [
+        "abo-multiview-recovered"
+      ],
+      "status": "trained",
+      "source": "furnitureai-professional-models-v0.4.1-repaired",
+      "metrics_path": "models/professional/checkpoints.json",
+      "metrics": {
+        "test_accuracy": null,
+        "test_macro_f1": null,
+        "input_size": 224
+      },
+      "limitations": [
+        "This recovered last checkpoint has no confirmed test metrics in the bundle report; it is registered for lineage and integrity only."
+      ]
+    },
+    {
+      "id": "supplier-ranker-ridge-v1",
+      "task": "supplier_ranking",
+      "architecture": "ridge_regression",
+      "artifact_path": "models/supplier_ranker/model.json",
+      "sha256": "02494a01470a7f46311714dc56bb01d3f20b09cd6d157d088ad1c7939ef5134a",
+      "size_bytes": 4477,
+      "dataset_ids": [
+        "supplier-master-v1"
+      ],
+      "status": "trained",
+      "trained_at": "2026-08-05",
+      "source": "training/train_supplier_ranker.py",
+      "metrics_path": "models/supplier_ranker/metrics.json",
+      "metrics": {
+        "records": 41,
+        "features": 83,
+        "alpha": 0.1,
+        "leave_one_out_mae": 3.717116470168097,
+        "leave_one_out_rmse": 5.094441236217737,
+        "leave_one_out_r2": 0.05506713738157987,
+        "leave_one_out_rank_correlation": 0.45243902439024397,
+        "repeated_5_fold_mae_mean": 4.06503737031294,
+        "repeated_5_fold_mae_std": 1.2028639642674017,
+        "repeated_5_fold_rmse_mean": 5.5107678497922405,
+        "repeated_5_fold_rmse_std": 1.5754232126503678
+      },
+      "limitations": [
+        "Only 41 supplier records are available.",
+        "The target score is expert-curated rather than observed procurement outcomes.",
+        "The model is a ranking assistant and must not make autonomous purchasing decisions."
+      ]
+    }
+  ]
+}
