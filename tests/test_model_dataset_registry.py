@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 from furniture_ai.model_dataset_registry import ModelDatasetRegistry
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = PROJECT_ROOT / "data" / "model_dataset_registry.json"
 
