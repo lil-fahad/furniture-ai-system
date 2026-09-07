@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-5-mini"
     openai_timeout_seconds: float = Field(default=60.0, gt=0, le=300)
+    openai_image_model: str = Field(default="gpt-image-2", min_length=1, max_length=120)
+    openai_image_quality: Literal["low", "medium", "high", "auto"] = "medium"
+    openai_image_size: Literal[
+        "auto",
+        "1024x1024",
+        "1536x1024",
+        "1024x1536",
+        "2048x1152",
+        "2048x2048",
+    ] = "1536x1024"
+    openai_image_timeout_seconds: float = Field(default=180.0, gt=0, le=600)
     database_path: Path = Path("data/furniture_ai.sqlite3")
     catalog_path: Path = Path("data/furniture_catalog.json")
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=100 * 1024 * 1024)
@@ -62,6 +73,14 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("openai_image_model")
+    @classmethod
+    def normalize_openai_image_model(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("OPENAI_IMAGE_MODEL must not be empty")
+        return normalized
 
     @field_validator("professional_vision_device")
     @classmethod
