@@ -94,10 +94,10 @@ def _verified_png(
         raise ValueError("Image output size is invalid")
 
     with Image.open(BytesIO(image_bytes)) as image:
-        image.load()
         width, height = image.size
         if width <= 0 or height <= 0 or width * height > max_pixels:
             raise ValueError("Image output dimensions are invalid")
+        image.load()
         normalized = image.convert("RGBA" if "A" in image.getbands() else "RGB")
         buffer = BytesIO()
         normalized.save(buffer, format="PNG")
