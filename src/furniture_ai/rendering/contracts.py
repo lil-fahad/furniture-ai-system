@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from enum import StrEnum
 from typing import Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from furniture_ai.contracts import DesignResult, OpeningKind, Point, Unit
 
@@ -11,6 +12,65 @@ from furniture_ai.contracts import DesignResult, OpeningKind, Point, Unit
 class RendererKind(StrEnum):
     MOCK = "mock"
     OPENAI_GPT_IMAGE_2 = "openai_gpt_image_2"
+    OPENART_GPT_IMAGE_25_FLARE = "openart_gpt_image_25_flare"
+    OPENART_GPT_IMAGE_25_SUNBURST = "openart_gpt_image_25_sunburst"
+
+
+class RenderVisualReference(BaseModel):
+    """One trusted OpenArt-hosted image reference for image-to-image generation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(min_length=1, max_length=2000)
+    label: str = Field(default="reference", min_length=1, max_length=160)
+
+    @field_validator("url")
+    @classmethod
+    def validate_openart_cdn_url(cls, value: str) -> str:
+        normalized = value.strip()
+        parsed = urlparse(normalized)
+        if parsed.scheme != "https" or parsed.hostname != "cdn.openart.ai":
+            raise ValueError("Visual references must use https://cdn.openart.ai URLs")
+        if parsed.username or parsed.password or parsed.port is not None:
+            raise ValueError("Visual reference URL must not contain credentials or a port")
+        if not parsed.path or parsed.path == "/":
+            raise ValueError("Visual reference URL must identify an image asset")
+        return normalized
+
+
+class RenderGenerationConfig(BaseModel):
+    """OpenArt-style image generation controls shared by photoreal renderers."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["text2image", "image2image"] = "text2image"
+    aspect_ratio: Literal[
+        "1:1",
+        "3:2",
+        "2:3",
+        "16:9",
+        "9:16",
+        "4:3",
+        "3:4",
+        "5:4",
+        "4:5",
+        "21:9",
+        "9:21",
+    ] = "4:3"
+    resolution_tier: Literal["1k", "2k", "4k"] = "2k"
+    quality: Literal["low", "medium", "high"] = "medium"
+    image_count: int = Field(default=1, ge=1, le=1)
+    lock_aspect_ratio: bool = True
+    auto_enhance_prompt: bool = False
+    visual_references: list[RenderVisualReference] = Field(default_factory=list, max_length=16)
+
+    @model_validator(mode="after")
+    def validate_mode_references(self) -> RenderGenerationConfig:
+        if self.mode == "image2image" and not self.visual_references:
+            raise ValueError("image2image mode requires at least one visual reference")
+        if self.mode == "text2image" and self.visual_references:
+            raise ValueError("text2image mode cannot include visual references")
+        return self
 
 
 class CameraSpec(BaseModel):
@@ -100,6 +160,7 @@ class RenderPreviewRequest(BaseModel):
     room_id: str | None = Field(default=None, max_length=160)
     backend: RendererKind = RendererKind.MOCK
     seed: int = Field(default=0, ge=0, le=2_147_483_647)
+    generation: RenderGenerationConfig = Field(default_factory=RenderGenerationConfig)
 
 
 class RenderPreviewResult(BaseModel):

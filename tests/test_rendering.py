@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import base64
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from furniture_ai.api_entry import app
 from furniture_ai.config import Settings, get_settings
@@ -16,6 +17,7 @@ from furniture_ai.layout import furnish_floor_plan
 from furniture_ai.rendering import (
     PromptCompiler,
     RenderBackendError,
+    RenderBackendUnavailable,
     RendererKind,
     RenderingService,
     RenderPreviewRequest,
@@ -77,6 +79,26 @@ class FakeImageClient:
         self.images = images or FakeImages()
 
 
+class FakeOpenArtRunner:
+    def __init__(
+        self,
+        *,
+        image_bytes: bytes | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.image_bytes = image_bytes or _png_bytes()
+        self.error = error
+        self.calls: list[tuple[list[str], float]] = []
+
+    def run(self, args: list[str], *, timeout: float) -> None:
+        self.calls.append((list(args), timeout))
+        if self.error is not None:
+            raise self.error
+        output_dir = Path(args[args.index("-o") + 1])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "generated.png").write_bytes(self.image_bytes)
+
+
 def _image_settings() -> Settings:
     return Settings(
         environment="test",
@@ -84,6 +106,15 @@ def _image_settings() -> Settings:
         openai_image_model="gpt-image-2",
         openai_image_quality="medium",
         openai_image_size="1536x1024",
+    )
+
+
+def _openart_settings(*, enabled: bool = True) -> Settings:
+    return Settings(
+        environment="test",
+        openart_enabled=enabled,
+        openart_cli_path="openart-test",
+        openart_image_timeout_seconds=90,
     )
 
 
@@ -195,6 +226,194 @@ def test_gpt_image_2_renderer_rejects_non_image_output() -> None:
                 design=_design(),
                 style="modern",
                 backend=RendererKind.OPENAI_GPT_IMAGE_2,
+            )
+        )
+
+
+def test_openart_style_flare_request_accepts_generation_controls() -> None:
+    request = RenderPreviewRequest(
+        design=_design(),
+        style="luxury warm modern",
+        backend="openart_gpt_image_25_flare",
+        generation={
+            "mode": "text2image",
+            "aspect_ratio": "4:3",
+            "resolution_tier": "2k",
+            "quality": "medium",
+            "image_count": 1,
+            "lock_aspect_ratio": True,
+            "auto_enhance_prompt": False,
+            "visual_references": [],
+        },
+    )
+
+    assert request.backend.value == "openart_gpt_image_25_flare"
+    assert request.generation.mode == "text2image"
+    assert request.generation.aspect_ratio == "4:3"
+    assert request.generation.resolution_tier == "2k"
+    assert request.generation.quality == "medium"
+
+
+def test_openart_flare_builds_grounded_text2image_cli_request() -> None:
+    runner = FakeOpenArtRunner()
+    result = RenderingService(
+        settings=_openart_settings(),
+        renderer_client=runner,
+    ).preview(
+        RenderPreviewRequest(
+            design=_design(),
+            style="luxury warm modern",
+            backend=RendererKind.OPENART_GPT_IMAGE_25_FLARE,
+            generation={
+                "mode": "text2image",
+                "aspect_ratio": "4:3",
+                "resolution_tier": "2k",
+                "quality": "medium",
+            },
+        )
+    )
+
+    assert result.photorealistic is True
+    assert result.artifact.backend is RendererKind.OPENART_GPT_IMAGE_25_FLARE
+    assert result.artifact.media_type == "image/png"
+    assert result.artifact.metadata["provider"] == "openart_cli"
+    assert result.artifact.metadata["model"] == "gpt-image-2-5-flare"
+    assert result.artifact.metadata["mode"] == "text2image"
+    assert result.artifact.metadata["reference_images_applied"] == 0
+
+    args, timeout = runner.calls[0]
+    assert args[:3] == ["openart-test", "generate", "image"]
+    assert args[args.index("--model") + 1] == "gpt-image-2-5-flare"
+    assert args[args.index("--aspect-ratio") + 1] == "4:3"
+    assert args[args.index("--resolution") + 1] == "2k"
+    assert "Three-seat sofa" in args[3]
+    assert "Hard constraints:" in args[3]
+    assert "--image" not in args
+    assert timeout == 90
+
+
+def test_openart_sunburst_routes_to_quality_focused_model() -> None:
+    runner = FakeOpenArtRunner()
+    result = RenderingService(
+        settings=_openart_settings(),
+        renderer_client=runner,
+    ).preview(
+        RenderPreviewRequest(
+            design=_design(),
+            backend=RendererKind.OPENART_GPT_IMAGE_25_SUNBURST,
+        )
+    )
+
+    args, _ = runner.calls[0]
+    assert args[args.index("--model") + 1] == "gpt-image-2-5-sunburst"
+    assert result.artifact.metadata["model"] == "gpt-image-2-5-sunburst"
+
+
+def test_openart_image2image_passes_only_trusted_visual_references() -> None:
+    runner = FakeOpenArtRunner()
+    references = [
+        {
+            "url": "https://cdn.openart.ai/furniture/room-reference.png",
+            "label": "room",
+        },
+        {
+            "url": "https://cdn.openart.ai/furniture/sofa-reference.png",
+            "label": "sofa",
+        },
+    ]
+    result = RenderingService(
+        settings=_openart_settings(),
+        renderer_client=runner,
+    ).preview(
+        RenderPreviewRequest(
+            design=_design(),
+            backend=RendererKind.OPENART_GPT_IMAGE_25_FLARE,
+            generation={
+                "mode": "image2image",
+                "visual_references": references,
+            },
+        )
+    )
+
+    args, _ = runner.calls[0]
+    image_args = [args[index + 1] for index, value in enumerate(args) if value == "--image"]
+    assert image_args == [reference["url"] for reference in references]
+    assert result.artifact.metadata["reference_images_applied"] == 2
+    assert not any("were not sent" in warning for warning in result.warnings)
+
+
+def test_openart_image2image_requires_reference() -> None:
+    with pytest.raises(ValidationError, match="requires at least one visual reference"):
+        RenderPreviewRequest(
+            design=_design(),
+            backend=RendererKind.OPENART_GPT_IMAGE_25_FLARE,
+            generation={"mode": "image2image"},
+        )
+
+
+def test_openart_visual_reference_rejects_arbitrary_remote_url() -> None:
+    with pytest.raises(ValidationError, match="cdn.openart.ai"):
+        RenderPreviewRequest(
+            design=_design(),
+            backend=RendererKind.OPENART_GPT_IMAGE_25_FLARE,
+            generation={
+                "mode": "image2image",
+                "visual_references": [
+                    {
+                        "url": "https://example.com/internal-room.png",
+                        "label": "unsafe",
+                    }
+                ],
+            },
+        )
+
+
+def test_openart_rejects_unverified_quality_flag_instead_of_guessing_cli_option() -> None:
+    runner = FakeOpenArtRunner()
+    service = RenderingService(
+        settings=_openart_settings(),
+        renderer_client=runner,
+    )
+
+    with pytest.raises(RenderBackendUnavailable, match="medium quality tier only"):
+        service.preview(
+            RenderPreviewRequest(
+                design=_design(),
+                backend=RendererKind.OPENART_GPT_IMAGE_25_FLARE,
+                generation={"quality": "high"},
+            )
+        )
+
+    assert runner.calls == []
+
+
+def test_openart_renderer_fails_closed_when_not_enabled() -> None:
+    service = RenderingService(
+        settings=_openart_settings(enabled=False),
+        renderer_client=FakeOpenArtRunner(),
+    )
+
+    with pytest.raises(RenderBackendUnavailable, match="not configured"):
+        service.preview(
+            RenderPreviewRequest(
+                design=_design(),
+                backend=RendererKind.OPENART_GPT_IMAGE_25_FLARE,
+            )
+        )
+
+
+def test_openart_renderer_rejects_invalid_image_output() -> None:
+    runner = FakeOpenArtRunner(image_bytes=b"not-an-image")
+    service = RenderingService(
+        settings=_openart_settings(),
+        renderer_client=runner,
+    )
+
+    with pytest.raises(RenderBackendError, match="returned an invalid image"):
+        service.preview(
+            RenderPreviewRequest(
+                design=_design(),
+                backend=RendererKind.OPENART_GPT_IMAGE_25_FLARE,
             )
         )
 

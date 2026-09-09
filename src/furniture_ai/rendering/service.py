@@ -37,17 +37,22 @@ class RenderingService:
             settings=self.settings,
             client=self.renderer_client,
         )
-        artifact = renderer.render(scene, prompt, seed=request.seed)
+        artifact = renderer.render(
+            scene,
+            prompt,
+            seed=request.seed,
+            generation=request.generation,
+        )
         warnings: list[str] = []
         if not renderer.photorealistic:
             warnings.append(
                 "The selected backend is a deterministic grounding preview, "
                 "not a photorealistic renderer."
             )
-        elif prompt.reference_urls:
+        elif prompt.reference_urls and artifact.metadata.get("reference_images_applied", 0) == 0:
             warnings.append(
-                "Product reference URLs are recorded for provenance but are not yet sent as "
-                "image inputs; this render is grounded by scene geometry and catalog text."
+                "Catalog reference URLs are recorded for provenance but were not sent as image "
+                "inputs. Use OpenArt image2image with trusted visual references to apply them."
             )
         return RenderPreviewResult(
             photorealistic=renderer.photorealistic,
