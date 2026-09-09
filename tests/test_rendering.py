@@ -256,3 +256,27 @@ def test_v2_render_preview_rejects_unknown_room() -> None:
 
     assert response.status_code == 422
     assert "Unknown render room_id" in response.json()["detail"]
+
+
+def test_openart_style_flare_request_accepts_generation_controls() -> None:
+    request = RenderPreviewRequest(
+        design=_design(),
+        style="luxury warm modern",
+        backend="openart_gpt_image_25_flare",
+        generation={
+            "mode": "text2image",
+            "aspect_ratio": "4:3",
+            "resolution_tier": "2k",
+            "quality": "medium",
+            "image_count": 1,
+            "lock_aspect_ratio": True,
+            "auto_enhance_prompt": False,
+            "visual_references": [],
+        },
+    )
+
+    assert request.backend.value == "openart_gpt_image_25_flare"
+    assert request.generation.mode == "text2image"
+    assert request.generation.aspect_ratio == "4:3"
+    assert request.generation.resolution_tier == "2k"
+    assert request.generation.quality == "medium"
