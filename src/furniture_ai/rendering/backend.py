@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import base64
 import binascii
+import shutil
+import subprocess
 from html import escape
 from io import BytesIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Protocol
 
 from PIL import Image, UnidentifiedImageError
@@ -11,12 +15,17 @@ from PIL import Image, UnidentifiedImageError
 from furniture_ai.config import Settings
 from furniture_ai.rendering.contracts import (
     RenderArtifact,
+    RenderGenerationConfig,
     RendererKind,
     RenderPromptPackage,
     SceneSpec,
 )
 
 MAX_RENDER_BYTES = 25 * 1024 * 1024
+_OPENART_MODEL_BY_KIND = {
+    RendererKind.OPENART_GPT_IMAGE_25_FLARE: "gpt-image-2-5-flare",
+    RendererKind.OPENART_GPT_IMAGE_25_SUNBURST: "gpt-image-2-5-sunburst",
+}
 
 
 class RenderBackendUnavailable(RuntimeError):
@@ -37,7 +46,73 @@ class RendererBackend(Protocol):
         prompt: RenderPromptPackage,
         *,
         seed: int,
+        generation: RenderGenerationConfig,
     ) -> RenderArtifact: ...
+
+
+class OpenArtCommandRunner(Protocol):
+    def run(self, args: list[str], *, timeout: float) -> None: ...
+
+
+class SubprocessOpenArtRunner:
+    """Execute the official OpenArt CLI without invoking a shell."""
+
+    def run(self, args: list[str], *, timeout: float) -> None:
+        try:
+            subprocess.run(
+                args,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                shell=False,
+            )
+        except FileNotFoundError as exc:
+            raise RenderBackendUnavailable("OpenArt CLI is unavailable") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RenderBackendError("OpenArt image generation timed out") from exc
+        except subprocess.CalledProcessError as exc:
+            raise RenderBackendError("OpenArt image generation failed") from exc
+        except OSError as exc:
+            raise RenderBackendUnavailable("OpenArt CLI is unavailable") from exc
+
+
+def _render_prompt(prompt: RenderPromptPackage) -> str:
+    return (
+        f"{prompt.positive_prompt}\n\n"
+        f"Hard constraints: {prompt.negative_prompt}. "
+        "Render one finished photorealistic interior image only."
+    )
+
+
+def _verified_png(
+    image_bytes: bytes,
+    *,
+    max_pixels: int,
+) -> tuple[str, int, int]:
+    if not image_bytes or len(image_bytes) > MAX_RENDER_BYTES:
+        raise ValueError("Image output size is invalid")
+
+    with Image.open(BytesIO(image_bytes)) as image:
+        image.load()
+        width, height = image.size
+        if width <= 0 or height <= 0 or width * height > max_pixels:
+            raise ValueError("Image output dimensions are invalid")
+        normalized = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+        buffer = BytesIO()
+        normalized.save(buffer, format="PNG")
+
+    png_bytes = buffer.getvalue()
+    if not png_bytes or len(png_bytes) > MAX_RENDER_BYTES:
+        raise ValueError("Normalized image output size is invalid")
+    return base64.b64encode(png_bytes).decode("ascii"), width, height
+
+
+def _resolve_openart_cli(cli_path: str) -> str | None:
+    candidate = Path(cli_path).expanduser()
+    if candidate.is_absolute() or candidate.parent != Path("."):
+        return str(candidate) if candidate.is_file() else None
+    return shutil.which(cli_path)
 
 
 class DeterministicMockRenderer:
@@ -52,7 +127,9 @@ class DeterministicMockRenderer:
         prompt: RenderPromptPackage,
         *,
         seed: int,
+        generation: RenderGenerationConfig,
     ) -> RenderArtifact:
+        del generation
         width, height, margin = 1024, 768, 40.0
         scale = min(
             (width - 2 * margin) / scene.source_width,
@@ -156,6 +233,7 @@ class OpenAIGPTImageRenderer:
         self.model = settings.openai_image_model
         self.quality = settings.openai_image_quality
         self.size = settings.openai_image_size
+        self.max_pixels = settings.max_image_pixels
 
     def render(
         self,
@@ -163,16 +241,13 @@ class OpenAIGPTImageRenderer:
         prompt: RenderPromptPackage,
         *,
         seed: int,
+        generation: RenderGenerationConfig,
     ) -> RenderArtifact:
-        render_prompt = (
-            f"{prompt.positive_prompt}\n\n"
-            f"Hard constraints: {prompt.negative_prompt}. "
-            "Render one finished photorealistic interior image only."
-        )
+        del scene, generation
         try:
             response = self.client.images.generate(
                 model=self.model,
-                prompt=render_prompt,
+                prompt=_render_prompt(prompt),
                 quality=self.quality,
                 size=self.size,
                 background="opaque",
@@ -182,16 +257,12 @@ class OpenAIGPTImageRenderer:
 
         try:
             data = response.data
-            encoded = data[0].b64_json.strip()
-            image_bytes = base64.b64decode(encoded, validate=True)
-            if not image_bytes or len(image_bytes) > MAX_RENDER_BYTES:
-                raise ValueError("Image output size is invalid")
-            with Image.open(BytesIO(image_bytes)) as image:
-                width, height = image.size
-                image_format = image.format
-                image.verify()
-            if image_format != "PNG":
-                raise ValueError("Image output is not PNG")
+            raw_encoded = data[0].b64_json.strip()
+            image_bytes = base64.b64decode(raw_encoded, validate=True)
+            encoded, width, height = _verified_png(
+                image_bytes,
+                max_pixels=self.max_pixels,
+            )
         except (
             AttributeError,
             IndexError,
@@ -221,6 +292,141 @@ class OpenAIGPTImageRenderer:
         )
 
 
+class OpenArtGPTImageRenderer:
+    """Render GPT Image 2.5 through the authenticated official OpenArt CLI."""
+
+    photorealistic = True
+
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        kind: RendererKind,
+        runner: OpenArtCommandRunner | None = None,
+    ) -> None:
+        if kind not in _OPENART_MODEL_BY_KIND:
+            raise ValueError(f"Unsupported OpenArt renderer backend: {kind}")
+        if not settings.openart_configured:
+            raise RenderBackendUnavailable("OpenArt renderer is not configured")
+
+        cli_path = settings.openart_cli_path
+        if runner is None:
+            resolved = _resolve_openart_cli(cli_path)
+            if resolved is None:
+                raise RenderBackendUnavailable("OpenArt CLI is unavailable")
+            cli_path = resolved
+            runner = SubprocessOpenArtRunner()
+
+        self.kind = kind
+        self.model = _OPENART_MODEL_BY_KIND[kind]
+        self.cli_path = cli_path
+        self.runner = runner
+        self.timeout = settings.openart_image_timeout_seconds
+        self.max_pixels = settings.max_image_pixels
+
+    @staticmethod
+    def _validate_supported_controls(generation: RenderGenerationConfig) -> None:
+        if generation.quality != "medium":
+            raise RenderBackendUnavailable(
+                "OpenArt CLI integration currently guarantees the medium quality tier only"
+            )
+        if not generation.lock_aspect_ratio:
+            raise RenderBackendUnavailable(
+                "OpenArt CLI integration currently requires a locked aspect ratio"
+            )
+        if generation.auto_enhance_prompt:
+            raise RenderBackendUnavailable(
+                "OpenArt CLI integration does not enable provider-side prompt enhancement"
+            )
+
+    def _command(
+        self,
+        prompt: RenderPromptPackage,
+        generation: RenderGenerationConfig,
+        output_dir: Path,
+    ) -> list[str]:
+        args = [
+            self.cli_path,
+            "generate",
+            "image",
+            _render_prompt(prompt),
+            "--model",
+            self.model,
+            "--aspect-ratio",
+            generation.aspect_ratio,
+            "--resolution",
+            generation.resolution_tier,
+            "--timeout",
+            str(int(self.timeout)),
+            "--json",
+            "-o",
+            str(output_dir),
+        ]
+        for reference in generation.visual_references:
+            args.extend(["--image", reference.url])
+        return args
+
+    @staticmethod
+    def _find_generated_image(output_dir: Path) -> Path:
+        allowed = {".png", ".jpg", ".jpeg", ".webp"}
+        candidates = sorted(
+            path
+            for path in output_dir.rglob("*")
+            if path.is_file() and path.suffix.lower() in allowed
+        )
+        if len(candidates) != 1:
+            raise RenderBackendError("OpenArt renderer returned an invalid image set")
+        return candidates[0]
+
+    def render(
+        self,
+        scene: SceneSpec,
+        prompt: RenderPromptPackage,
+        *,
+        seed: int,
+        generation: RenderGenerationConfig,
+    ) -> RenderArtifact:
+        del scene
+        self._validate_supported_controls(generation)
+        try:
+            with TemporaryDirectory(prefix="furniture-openart-") as temp_dir:
+                output_dir = Path(temp_dir)
+                self.runner.run(
+                    self._command(prompt, generation, output_dir),
+                    timeout=self.timeout,
+                )
+                output_path = self._find_generated_image(output_dir)
+                image_bytes = output_path.read_bytes()
+                encoded, width, height = _verified_png(
+                    image_bytes,
+                    max_pixels=self.max_pixels,
+                )
+        except (RenderBackendUnavailable, RenderBackendError):
+            raise
+        except (ValueError, UnidentifiedImageError, OSError) as exc:
+            raise RenderBackendError("OpenArt renderer returned an invalid image") from exc
+
+        return RenderArtifact(
+            backend=self.kind,
+            media_type="image/png",
+            data_uri=f"data:image/png;base64,{encoded}",
+            width=width,
+            height=height,
+            metadata={
+                "provider": "openart_cli",
+                "model": self.model,
+                "mode": generation.mode,
+                "quality": generation.quality,
+                "resolution_tier": generation.resolution_tier,
+                "aspect_ratio": generation.aspect_ratio,
+                "scene_fingerprint": prompt.scene_fingerprint,
+                "seed_requested": seed,
+                "seed_applied": False,
+                "reference_images_applied": len(generation.visual_references),
+            },
+        )
+
+
 def get_renderer(
     kind: RendererKind,
     *,
@@ -233,4 +439,8 @@ def get_renderer(
         if settings is None:
             raise RenderBackendUnavailable("Photorealistic renderer is not configured")
         return OpenAIGPTImageRenderer(settings, client=client)
+    if kind in _OPENART_MODEL_BY_KIND:
+        if settings is None:
+            raise RenderBackendUnavailable("OpenArt renderer is not configured")
+        return OpenArtGPTImageRenderer(settings, kind=kind, runner=client)
     raise ValueError(f"Unsupported renderer backend: {kind}")
