@@ -44,6 +44,9 @@ class Settings(BaseSettings):
         "2048x2048",
     ] = "1536x1024"
     openai_image_timeout_seconds: float = Field(default=180.0, gt=0, le=600)
+    openart_enabled: bool = False
+    openart_cli_path: str = Field(default="openart", min_length=1, max_length=1000)
+    openart_image_timeout_seconds: float = Field(default=300.0, gt=0, le=900)
     database_path: Path = Path("data/furniture_ai.sqlite3")
     catalog_path: Path = Path("data/furniture_catalog.json")
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=100 * 1024 * 1024)
@@ -80,6 +83,16 @@ class Settings(BaseSettings):
         normalized = value.strip()
         if not normalized:
             raise ValueError("OPENAI_IMAGE_MODEL must not be empty")
+        return normalized
+
+    @field_validator("openart_cli_path")
+    @classmethod
+    def normalize_openart_cli_path(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("OPENART_CLI_PATH must not be empty")
+        if "\x00" in normalized:
+            raise ValueError("OPENART_CLI_PATH contains an invalid character")
         return normalized
 
     @field_validator("professional_vision_device")
@@ -126,6 +139,10 @@ class Settings(BaseSettings):
     @property
     def openai_configured(self) -> bool:
         return bool(self.openai_api_key and self.openai_api_key.get_secret_value().strip())
+
+    @property
+    def openart_configured(self) -> bool:
+        return self.openart_enabled
 
     @property
     def service_auth_enabled(self) -> bool:
